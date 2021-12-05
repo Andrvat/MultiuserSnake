@@ -3,10 +3,10 @@ package app.utilities;
 public abstract class Subscriber {
     protected Publisher publisher;
 
-    public abstract void Notify(int x);
+    public abstract void inform();
 
-    public Subscriber(Publisher publisher){
+    public Subscriber(Publisher publisher) {
         this.publisher = publisher;
-        publisher.addSub(this);
+        this.publisher.addSubscriber(this);
     }
 }

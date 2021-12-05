@@ -4,14 +4,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 public abstract class Publisher {
-    List<Subscriber> subs = new ArrayList<>();
-    public void NotifyAll(int x){
-        for (Subscriber sub : subs){
-            sub.Notify(x);
+    List<Subscriber> subscribers = new ArrayList<>();
+
+    public void informAllSubscribers() {
+        for (Subscriber subscriber : subscribers) {
+            subscriber.inform();
         }
     }
 
-    public void addSub(Subscriber sub){
-        subs.add(sub);
+    public void addSubscriber(Subscriber subscriber) {
+        subscribers.add(subscriber);
     }
 }

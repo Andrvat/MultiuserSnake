@@ -24,7 +24,7 @@ public class GameController {
                 .setPingDelayMs(100)
                 .setNodeTimeoutMs(9000)
                 .build();
-        gameModel.newGameAsMaster(gameConfig, networkNode.getNodeName(), networkNode.nodeID.hashCode(), networkNode.getMyPort());
+        gameModel.launchNewGameAsMaster(gameConfig, networkNode.getNodeName(), networkNode.nodeID.hashCode(), networkNode.getMyPort());
         networkNode.changeRole(SnakesProto.NodeRole.MASTER);
         System.out.println("NEW GAME!");
     }
@@ -40,7 +40,7 @@ public class GameController {
                 .setPingDelayMs(100)
                 .setNodeTimeoutMs(9000)
                 .build();
-        gameModel.newGameAsMaster(gameConfig, networkNode.getNodeName(), networkNode.nodeID.hashCode(), networkNode.getMyPort());
+        gameModel.launchNewGameAsMaster(gameConfig, networkNode.getNodeName(), networkNode.nodeID.hashCode(), networkNode.getMyPort());
         networkNode.changeRole(SnakesProto.NodeRole.MASTER);
         System.out.println("NEW GAME!");
     }
@@ -49,8 +49,8 @@ public class GameController {
         networkNode.changeDirection(direction);
     }
 
-    public void nModelSub(int x) {
-        gameModel.NotifyAll(x);
+    public void nModelSub() {
+        gameModel.informAllSubscribers();
     }
 
     public void join(SnakesProto.GamePlayer player, SnakesProto.GameConfig config) {

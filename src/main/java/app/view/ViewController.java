@@ -20,11 +20,11 @@ public class ViewController extends Subscriber {
         super(gameModel);
         this.networkNode = networkNode;
         gameController = new GameController(gameModel, networkNode);
-        gameDisplay = new GameDisplay(w, h, gameModel.getWidth(), gameModel.getHeight(), gameController, gameModel, networkNode.nodeID.hashCode());
+        gameDisplay = new GameDisplay(w, h, gameModel.getWidthFromGameConfig(), gameModel.getHeightFromGameConfig(), gameController, gameModel, networkNode.nodeID.hashCode());
     }
 
     @Override
-    public void Notify(int x){
+    public void inform(){
         gameDisplay.update();
     }
 

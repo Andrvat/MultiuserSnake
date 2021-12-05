@@ -81,7 +81,7 @@ public class GameField extends JPanel {
     }
 
     private void paintSnake(SnakesProto.GameState.Snake snake, Graphics g) {
-        List<SnakesProto.GameState.Coord> list = gameModel.snakeToList(snake);
+        List<SnakesProto.GameState.Coord> list = gameModel.getSnakeAllCoordinates(snake);
         if (snake.getPlayerId() == id) g.setColor(Color.YELLOW);
         else g.setColor(Color.RED);
         for (SnakesProto.GameState.Coord coord : list) {

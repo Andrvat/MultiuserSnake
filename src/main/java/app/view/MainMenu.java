@@ -30,7 +30,7 @@ public class MainMenu extends JPanel {
 
         this.gameController = gameController;
         buttonNewGame.addActionListener((e)-> new SettingsMenu(gameController));
-        updateAnn.addActionListener((e)-> gameController.nModelSub(3));
+        updateAnn.addActionListener((e)-> gameController.nModelSub());
         add(box);
         box.add(buttonNewGame);
         box.add(updateAnn);
@@ -42,9 +42,9 @@ public class MainMenu extends JPanel {
         char d = ' ';
         score.removeAll();
         for (SnakesProto.GamePlayer player: gameModel.getGameState().getPlayers().getPlayersList()) {
-            if (gameModel.getSnakeCoordinates().containsKey(player.getId())) {
+            if (gameModel.getSnakesAllCoordinatesByPlayer().containsKey(player.getId())) {
                 if (player.getId() == gameModel.getSessionMasterId()) d = '*';
-                score.add(new JLabel("playerId : [" + player.getId() + "]          score : " + gameModel.getSnakeCoordinates().get(player.getId()).size() + d));
+                score.add(new JLabel("playerId : [" + player.getId() + "]          score : " + gameModel.getSnakesAllCoordinatesByPlayer().get(player.getId()).size() + d));
             }
             else score.add(new JLabel("playerId : [" + player.getId() + "]          score : 0 VIEWER"));
 
