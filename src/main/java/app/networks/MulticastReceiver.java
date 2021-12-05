@@ -1,4 +1,4 @@
-package app.utilities;
+package app.networks;
 
 import app.networks.NetworkNode;
 import proto.SnakesProto;

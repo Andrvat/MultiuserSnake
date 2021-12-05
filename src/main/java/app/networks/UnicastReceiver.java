@@ -1,4 +1,4 @@
-package app.utilities;
+package app.networks;
 
 import java.io.IOException;
 import java.net.DatagramPacket;

@@ -1,4 +1,4 @@
-package app.utilities;
+package app.utilities.notifications;
 
 public abstract class Subscriber {
     protected Publisher publisher;

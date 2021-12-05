@@ -2,7 +2,7 @@ package app.view;
 
 import app.model.GameModel;
 import app.controller.GameController;
-import app.utilities.CommunicationMessage;
+import app.networks.CommunicationMessage;
 
 import javax.swing.*;
 import java.awt.*;

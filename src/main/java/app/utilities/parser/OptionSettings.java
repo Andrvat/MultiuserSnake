@@ -1,4 +1,4 @@
-package app.utilities;
+package app.utilities.parser;
 
 import lombok.Builder;
 

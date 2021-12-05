@@ -1,7 +1,7 @@
 package app.model;
 
 import app.exceptions.ImpossibleOperationException;
-import app.utilities.Publisher;
+import app.utilities.notifications.Publisher;
 import proto.SnakesProto;
 
 import java.time.Instant;

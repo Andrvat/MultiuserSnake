@@ -1,4 +1,4 @@
-package app.utilities;
+package app.utilities.parser;
 
 import me.alexpanov.net.FreePortFinder;
 import org.apache.commons.cli.*;
@@ -78,10 +78,6 @@ public class CmdArgsParser {
 
     public int getHostPort() {
         return hostPort;
-    }
-
-    public Options getCmdOptions() {
-        return cmdOptions;
     }
 
     @Override

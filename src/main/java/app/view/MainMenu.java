@@ -2,7 +2,7 @@ package app.view;
 
 import app.model.GameModel;
 import app.controller.GameController;
-import app.utilities.CommunicationMessage;
+import app.networks.CommunicationMessage;
 import proto.SnakesProto;
 
 import javax.swing.*;
@@ -59,17 +59,17 @@ public class MainMenu extends JPanel {
             JButton button = new JButton("Войти");
             JButton button1 = new JButton("Выйти");
             button1.addActionListener((e)-> gameController.exit());
-            button.addActionListener((e)-> gameController.join(entry.getKey().getFrom(),
-                    entry.getKey().getGameMessage().getAnnouncement().getConfig()));
-            JLabel label = new JLabel(Objects.requireNonNull(GameModel.getMasterPlayer(entry.getKey().getGameMessage().getAnnouncement().getPlayers())).getName()
-                    + "    [" +entry.getKey().getFrom().getIpAddress() +"]    "
-                    +entry.getKey().getGameMessage().getAnnouncement().getPlayers().getPlayersCount()
-                    +"     "+ entry.getKey().getGameMessage().getAnnouncement().getConfig().getWidth() +"x"+entry.getKey().getGameMessage().getAnnouncement().getConfig().getHeight()
-                    +"     " +entry.getKey().getGameMessage().getAnnouncement().getConfig().getFoodStatic() + " + "
-                    + entry.getKey().getGameMessage().getAnnouncement().getConfig().getFoodPerPlayer()+ "x");
+            button.addActionListener((e)-> gameController.join(entry.getKey().getSenderPlayer(),
+                    entry.getKey().getMessage().getAnnouncement().getConfig()));
+            JLabel label = new JLabel(Objects.requireNonNull(GameModel.getMasterPlayer(entry.getKey().getMessage().getAnnouncement().getPlayers())).getName()
+                    + "    [" +entry.getKey().getSenderPlayer().getIpAddress() +"]    "
+                    +entry.getKey().getMessage().getAnnouncement().getPlayers().getPlayersCount()
+                    +"     "+ entry.getKey().getMessage().getAnnouncement().getConfig().getWidth() +"x"+entry.getKey().getMessage().getAnnouncement().getConfig().getHeight()
+                    +"     " +entry.getKey().getMessage().getAnnouncement().getConfig().getFoodStatic() + " + "
+                    + entry.getKey().getMessage().getAnnouncement().getConfig().getFoodPerPlayer()+ "x");
 
             panel.add(label, BorderLayout.WEST);
-            if (entry.getKey().getFrom().getId() == gameModel.getSessionMasterId() && gameController.checkAlive()) panel.add(button1, BorderLayout.EAST);
+            if (entry.getKey().getSenderPlayer().getId() == gameModel.getSessionMasterId() && gameController.checkAlive()) panel.add(button1, BorderLayout.EAST);
             else
                 panel.add(button, BorderLayout.EAST);
             ann.add(panel);

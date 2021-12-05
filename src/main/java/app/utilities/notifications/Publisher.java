@@ -1,4 +1,4 @@
-package app.utilities;
+package app.utilities.notifications;
 
 import java.util.ArrayList;
 import java.util.List;

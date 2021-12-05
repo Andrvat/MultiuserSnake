@@ -3,8 +3,8 @@ package app.view;
 import app.model.GameModel;
 import app.networks.NetworkNode;
 import app.controller.GameController;
-import app.utilities.CommunicationMessage;
-import app.utilities.Subscriber;
+import app.networks.CommunicationMessage;
+import app.utilities.notifications.Subscriber;
 
 import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
