@@ -61,7 +61,7 @@ public class MainMenu extends JPanel {
             button1.addActionListener((e)-> gameController.exit());
             button.addActionListener((e)-> gameController.join(entry.getKey().getFrom(),
                     entry.getKey().getGameMessage().getAnnouncement().getConfig()));
-            JLabel label = new JLabel(Objects.requireNonNull(GameModel.getMaster(entry.getKey().getGameMessage().getAnnouncement().getPlayers())).getName()
+            JLabel label = new JLabel(Objects.requireNonNull(GameModel.getMasterPlayer(entry.getKey().getGameMessage().getAnnouncement().getPlayers())).getName()
                     + "    [" +entry.getKey().getFrom().getIpAddress() +"]    "
                     +entry.getKey().getGameMessage().getAnnouncement().getPlayers().getPlayersCount()
                     +"     "+ entry.getKey().getGameMessage().getAnnouncement().getConfig().getWidth() +"x"+entry.getKey().getGameMessage().getAnnouncement().getConfig().getHeight()

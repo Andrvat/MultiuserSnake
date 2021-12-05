@@ -62,6 +62,6 @@ public class GameController {
     }
 
     public boolean checkAlive() {
-        return gameModel.isAlive(networkNode.nodeID.hashCode());
+        return gameModel.isPlayerSnakeAlive(networkNode.nodeID.hashCode());
     }
 }

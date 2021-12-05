@@ -191,8 +191,8 @@ public class GameModel extends Publisher {
         if (!isThereFreeCoordinates) {
             return null;
         }
-        var headCoordinates = buildCoordinatesBy(randomX + 2, randomY + 2);
-        var offsetFromHead = buildCoordinatesBy(0, 1);
+        var headCoordinates = convertToFieldCoordinate(randomX + 2, randomY + 2);
+        var offsetFromHead = convertToFieldCoordinate(0, 1);
         return new LinkedList<>(List.of(headCoordinates, offsetFromHead));
     }
 
@@ -202,7 +202,7 @@ public class GameModel extends Publisher {
             for (int currentY = leftCornerY; currentY < rightCornerY; currentY++) {
                 for (var snake : gameState.getSnakesList()) {
                     for (var snakeCoordinates : snake.getPointsList()) {
-                        if (buildCoordinatesBy(currentX, currentY).equals(snakeCoordinates)) {
+                        if (convertToFieldCoordinate(currentX, currentY).equals(snakeCoordinates)) {
                             return false;
                         }
                     }
@@ -223,39 +223,37 @@ public class GameModel extends Publisher {
         return aliveSnakesNumber;
     }
 
-    public void computeNextStep() {
-        LinkedList<SnakesProto.GameState.Snake> snakes = new LinkedList<>();
-        LinkedList<Integer> playersWithDeadSnakesIds;
-        for (SnakesProto.GameState.Snake snake : gameState.getSnakesList()) {
-            snake = computeSnake(snake);
-            snakes.add(snake);
+    public void makeGameNextStep() {
+        LinkedList<SnakesProto.GameState.Snake> aliveSnakes = new LinkedList<>();
+        for (var snake : gameState.getSnakesList()) {
+            snake = makeSnakeStep(snake);
+            aliveSnakes.add(snake);
         }
-        playersWithDeadSnakesIds = checkDeath();
-        snakes = killSome(playersWithDeadSnakesIds, snakes);
+        LinkedList<Integer> deadSnakeOwners = getDeadSnakeOwners();
+        aliveSnakes = removeDeadOwnerSnakes(deadSnakeOwners, aliveSnakes);
         gameState = gameState.toBuilder().clearSnakes().build();
-        for (SnakesProto.GameState.Snake snake : snakes) {
+        for (var snake : aliveSnakes) {
             gameState = gameState.toBuilder().addSnakes(snake).build();
         }
-        this.addFood();
+        this.updateFieldFood();
         this.informAllSubscribers();
-
     }
 
-    private void addFood() {
-        Vector<SnakesProto.GameState.Coord> freePlaces = new Vector<>();
+    private void updateFieldFood() {
+        ArrayList<SnakesProto.GameState.Coord> freeCoordinates = new ArrayList<>();
         for (int i = 0; i < getWidthFromGameConfig(); i++) {
             for (int j = 0; j < getHeightFromGameConfig(); j++) {
-                SnakesProto.GameState.Coord coord1 = buildCoordinatesBy(i, j);
-                for (SnakesProto.GameState.Snake snake : gameState.getSnakesList()) {
-                    for (SnakesProto.GameState.Coord coord : snake.getPointsList()) {
-                        if (!coord1.equals(coord)) {
-                            freePlaces.add(buildCoordinatesBy(i, j));
+                var trackedCoordinate = convertToFieldCoordinate(i, j);
+                for (var snake : gameState.getSnakesList()) {
+                    for (var snakeCoordinate : snake.getPointsList()) {
+                        if (!trackedCoordinate.equals(snakeCoordinate)) {
+                            freeCoordinates.add(trackedCoordinate);
                         }
                     }
                 }
                 for (SnakesProto.GameState.Coord coord : gameState.getFoodsList()) {
-                    if (!coord1.equals(coord)) {
-                        freePlaces.add(coord1);
+                    if (!trackedCoordinate.equals(coord)) {
+                        freeCoordinates.add(trackedCoordinate);
                     }
                 }
             }
@@ -263,80 +261,85 @@ public class GameModel extends Publisher {
         SnakesProto.GameState.Builder builder = gameState.toBuilder();
         int foodCount = gameState.getFoodsCount();
         while (foodCount < gameState.getConfig().getFoodStatic() + gameState.getConfig().getFoodPerPlayer() * getAliveSnakesNumber()) {
-            SnakesProto.GameState.Coord food = tryAddFruit(freePlaces);
+            SnakesProto.GameState.Coord food = tryAddFruit(freeCoordinates);
             if (food == null) break;
 
             builder.addFoods(food);
-            freePlaces.remove(food);
+            freeCoordinates.remove(food);
             foodCount++;
         }
         gameState = builder.build();
     }
 
-    public SnakesProto.GameState.Coord tryAddFruit(Vector<SnakesProto.GameState.Coord> coords) {
+    public SnakesProto.GameState.Coord tryAddFruit(ArrayList<SnakesProto.GameState.Coord> coords) {
         if (coords.size() == 0) return null;
         Random random = new Random();
         return coords.get(abs(random.nextInt()) % coords.size());
     }
 
-    public SnakesProto.GameState.Snake computeSnake(SnakesProto.GameState.Snake snake) {
-        snake = snake.toBuilder().setHeadDirection(snakesDirectionsByPlayer.get(snake.getPlayerId())).build();
-        snake = setPoints(snake, makeStep(snakesAllCoordinatesByPlayer.get(snake.getPlayerId()), snake.getHeadDirection()));
+    public SnakesProto.GameState.Snake makeSnakeStep(SnakesProto.GameState.Snake snake) {
+        var snakeNextDirection = snakesDirectionsByPlayer.get(snake.getPlayerId());
+        snake = snake.toBuilder().setHeadDirection(snakeNextDirection).build();
+        var snakeCoordinatesAfterStep = changeSnakeCoordinatesAccordingToStep(
+                snakesAllCoordinatesByPlayer.get(snake.getPlayerId()), snake.getHeadDirection());
+        snake = this.getSnakeWithUpdatedKeyCoordinates(snake, snakeCoordinatesAfterStep);
         snakesAllCoordinatesByPlayer.replace(snake.getPlayerId(), getSnakeAllCoordinates(snake));
         return snake;
     }
 
-    private LinkedList<Integer> checkDeath() {
-        LinkedList<Integer> death = new LinkedList<>();
+    private LinkedList<Integer> getDeadSnakeOwners() {
+        LinkedList<Integer> deadSnakeOwners = new LinkedList<>();
         for (int i = 0; i < gameState.getSnakesCount(); i++) {
-            int id1 = gameState.getSnakes(i).getPlayerId();
+            int firstSnakeOwner = gameState.getSnakes(i).getPlayerId();
+            var firstSnakeHead = snakesAllCoordinatesByPlayer.get(firstSnakeOwner).getFirst();
             for (int j = 0; j < gameState.getSnakesCount(); j++) {
-                int id2 = gameState.getSnakes(j).getPlayerId();
-                int begin = 1;
-                if (i != j) begin = 0;
-                if (isDead(snakesAllCoordinatesByPlayer.get(id1).getFirst(), snakesAllCoordinatesByPlayer.get(id2), begin)) {
-                    death.add(id1);
+                int secondSnakeOwner = gameState.getSnakes(j).getPlayerId();
+                int startCheckingIndex = (i != j) ? 0 : 1;
+                if (isHeadCollidedWithBody(firstSnakeHead, snakesAllCoordinatesByPlayer.get(secondSnakeOwner), startCheckingIndex)) {
+                    deadSnakeOwners.add(firstSnakeOwner);
                 }
             }
         }
-        return death;
+        return deadSnakeOwners;
     }
 
-    private LinkedList<SnakesProto.GameState.Snake> killSome(LinkedList<Integer> death, LinkedList<SnakesProto.GameState.Snake> s) {
-        LinkedList<SnakesProto.GameState.Snake> snakes = new LinkedList<>();
-        for (SnakesProto.GameState.Snake snake : s) {
-            boolean isDead = false;
-            for (Integer integer : death) {
-                if (integer == snake.getPlayerId()) {
-                    killSnake(integer);
-                    isDead = true;
-                    this.snakesAllCoordinatesByPlayer.remove(integer);
+    private LinkedList<SnakesProto.GameState.Snake> removeDeadOwnerSnakes(LinkedList<Integer> deadSnakeOwners,
+                                                                          LinkedList<SnakesProto.GameState.Snake> snakes) {
+        LinkedList<SnakesProto.GameState.Snake> aliveSnakes = new LinkedList<>();
+        for (var snake : snakes) {
+            boolean isSnakeDead = false;
+            for (var ownerId : deadSnakeOwners) {
+                if (ownerId == snake.getPlayerId()) {
+                    isSnakeDead = true;
+                    this.generateFoodFromDeadSnake(ownerId);
+                    snakesAllCoordinatesByPlayer.remove(ownerId);
                     break;
                 }
             }
-            if (!isDead)
-                snakes.add(snake);
-        }
-        return snakes;
-    }
-
-    private void killSnake(int id) {
-        SnakesProto.GameState.Builder builder = gameState.toBuilder();
-        for (SnakesProto.GameState.Coord coord : snakesAllCoordinatesByPlayer.get(id)) {
-            Random random = new Random();
-            int proc = abs(random.nextInt() % 100);
-            if (proc < gameState.getConfig().getDeadFoodProb() * 100) {
-                builder.addFoods(coord);
+            if (!isSnakeDead) {
+                aliveSnakes.add(snake);
             }
         }
-        gameState = builder.build();
-
-        changePlayerGameStatus(id, SnakesProto.NodeRole.VIEWER, SnakesProto.GameState.Snake.SnakeState.ZOMBIE);
+        return aliveSnakes;
     }
 
-    private boolean isDead(SnakesProto.GameState.Coord head, LinkedList<SnakesProto.GameState.Coord> s2, int begin) {
-        for (int i = begin; i < s2.size(); i++) {
-            if (s2.get(i).equals(head))
+    private void generateFoodFromDeadSnake(int deadSnakeOwnerId) {
+        var gameStateBuilder = gameState.toBuilder();
+        for (var snakeCoordinate : snakesAllCoordinatesByPlayer.get(deadSnakeOwnerId)) {
+            int randomPoint = new Random().nextInt(100);
+            if (randomPoint < gameState.getConfig().getDeadFoodProb() * 100) {
+                gameStateBuilder.addFoods(snakeCoordinate);
+            }
+        }
+        gameState = gameStateBuilder.build();
+        this.changePlayerGameStatus(deadSnakeOwnerId, SnakesProto.NodeRole.VIEWER, SnakesProto.GameState.Snake.SnakeState.ZOMBIE);
+    }
+
+    private boolean isHeadCollidedWithBody(SnakesProto.GameState.Coord headCoordinate,
+                                           LinkedList<SnakesProto.GameState.Coord> bodyCoordinates,
+                                           int startCheckingIndex) {
+        for (int i = startCheckingIndex; i < bodyCoordinates.size(); i++) {
+            if (bodyCoordinates.get(i).equals(headCoordinate))
                 return true;
         }
         return false;
@@ -354,7 +357,7 @@ public class GameModel extends Publisher {
                 int y = coordinate.getY();
                 int singleOffset = (y < 0) ? -1 : 1;
                 while (y != 0) {
-                    keyCoordinates.add(buildCoordinatesBy(
+                    keyCoordinates.add(convertToFieldCoordinate(
                             keyCoordinates.getLast().getX(),
                             keyCoordinates.getLast().getY() + singleOffset));
                     y -= singleOffset;
@@ -365,7 +368,7 @@ public class GameModel extends Publisher {
                 int x = coordinate.getX();
                 int singleOffset = (x < 0) ? -1 : 1;
                 while (x != 0) {
-                    keyCoordinates.add(buildCoordinatesBy(
+                    keyCoordinates.add(convertToFieldCoordinate(
                             keyCoordinates.getLast().getX() + singleOffset,
                             keyCoordinates.getLast().getY()));
                     x -= singleOffset;
@@ -388,92 +391,134 @@ public class GameModel extends Publisher {
         return 0 != coordinate.getX();
     }
 
-    private LinkedList<SnakesProto.GameState.Coord> makeStep
-            (LinkedList<SnakesProto.GameState.Coord> coords, SnakesProto.Direction direction) {
-        switch (direction) {
-            case UP -> coords.addFirst(buildCoordinatesBy(coords.getFirst().getX(), coords.getFirst().getY() - 1));
-            case DOWN -> coords.addFirst(buildCoordinatesBy(coords.getFirst().getX(), coords.getFirst().getY() + 1));
-            case LEFT -> coords.addFirst(buildCoordinatesBy(coords.getFirst().getX() - 1, coords.getFirst().getY()));
-            case RIGHT -> coords.addFirst(buildCoordinatesBy(coords.getFirst().getX() + 1, coords.getFirst().getY()));
+    private LinkedList<SnakesProto.GameState.Coord> changeSnakeCoordinatesAccordingToStep(
+            LinkedList<SnakesProto.GameState.Coord> snakeCoordinates, SnakesProto.Direction chosenDirection) {
+        int nextX = snakeCoordinates.getFirst().getX();
+        int nextY = snakeCoordinates.getFirst().getY();
+        switch (chosenDirection) {
+            case UP -> nextY--;
+            case DOWN -> nextY++;
+            case LEFT -> nextX--;
+            case RIGHT -> nextX++;
         }
-
-        if (!isFood(coords.getFirst())) {
-            coords.removeLast();
-        } else removeFood(coords.getFirst());
-        return coords;
+        snakeCoordinates.addFirst(convertToFieldCoordinate(nextX, nextY));
+        if (isThereFoodByCoordinate(snakeCoordinates.getFirst())) {
+            removeFoodFromCoordinate(snakeCoordinates.getFirst());
+        } else {
+            snakeCoordinates.removeLast();
+        }
+        return snakeCoordinates;
     }
 
-    private void removeFood(SnakesProto.GameState.Coord coord) {
-        Vector<SnakesProto.GameState.Coord> vector = new Vector<>();
-        for (SnakesProto.GameState.Coord coord1 : gameState.getFoodsList()) {
-            if (!coord.equals(coord1)) vector.add(coord1);
+    private void removeFoodFromCoordinate(SnakesProto.GameState.Coord coordinate) {
+        LinkedList<SnakesProto.GameState.Coord> leftoverFood = new LinkedList<>();
+        for (var foodCoordinate : gameState.getFoodsList()) {
+            if (!coordinate.equals(foodCoordinate)) {
+                leftoverFood.add(foodCoordinate);
+            }
         }
-        SnakesProto.GameState.Builder builder = gameState.toBuilder().clearFoods();
-        for (SnakesProto.GameState.Coord coord1 : vector) {
-            builder.addFoods(coord1);
+        var gameStateBuilder = gameState.toBuilder();
+        gameStateBuilder.clearFoods();
+        for (var foodCoordinate : leftoverFood) {
+            gameStateBuilder.addFoods(foodCoordinate);
         }
-        gameState = builder.build();
+        gameState = gameStateBuilder.build();
     }
 
-    private boolean isFood(SnakesProto.GameState.Coord c) {
-        for (SnakesProto.GameState.Coord coord : gameState.getFoodsList()) {
-            if (c.equals(coord)) return true;
+    private boolean isThereFoodByCoordinate(SnakesProto.GameState.Coord coordinate) {
+        for (var foodCoordinate : gameState.getFoodsList()) {
+            if (coordinate.equals(foodCoordinate)) {
+                return true;
+            }
         }
         return false;
     }
 
-    private SnakesProto.GameState.Snake setPoints(SnakesProto.GameState.Snake
-                                                          snake, LinkedList<SnakesProto.GameState.Coord> coords) {
-        SnakesProto.GameState.Snake.Builder builder = snake.toBuilder().clearPoints();
-        LinkedList<SnakesProto.GameState.Coord> list = new LinkedList<>();
-        list.add(coords.getFirst());
-        builder.addPoints(list.getLast());
-        int prevDIffX = coords.get(1).getX() - coords.get(0).getX();
-        int prevDiffY = coords.get(1).getY() - coords.get(0).getY();
+    // TODO: баг с проходом через правую сторону на левую (обрезается змейка или падает программа)
+    private SnakesProto.GameState.Snake getSnakeWithUpdatedKeyCoordinates(
+            SnakesProto.GameState.Snake snake, LinkedList<SnakesProto.GameState.Coord> snakeCoordinatesAfterStep) {
+        var snakeBuilder = snake.toBuilder();
+        snakeBuilder.clearPoints();
+        LinkedList<SnakesProto.GameState.Coord> keyCoordinates = new LinkedList<>();
+        keyCoordinates.add(snakeCoordinatesAfterStep.getFirst());
+        snakeBuilder.addPoints(keyCoordinates.getFirst());
 
-        prevDIffX = normalizeDiff(prevDIffX);
-        prevDiffY = normalizeDiff(prevDiffY);
+        int differenceByXWithPrevious = transformXDifferenceAccordingToTorus(
+                snakeCoordinatesAfterStep.get(1).getX() - snakeCoordinatesAfterStep.getFirst().getX());
+        int differenceByYWithPrevious = transformYDifferenceAccordingToTorus(
+                snakeCoordinatesAfterStep.get(1).getY() - snakeCoordinatesAfterStep.getFirst().getY());
 
-        for (int i = 2; i < coords.size(); i++) {
-            int diffX = coords.get(i).getX() - coords.get(i - 1).getX();
-            int diffY = coords.get(i).getY() - coords.get(i - 1).getY();
+        for (int i = 2; i < snakeCoordinatesAfterStep.size(); i++) {
+            int currentDifferenceByX = transformXDifferenceAccordingToTorus(
+                    snakeCoordinatesAfterStep.get(i).getX() - snakeCoordinatesAfterStep.get(i - 1).getX());
+            int currentDifferenceByY = transformYDifferenceAccordingToTorus(
+                    snakeCoordinatesAfterStep.get(i).getY() - snakeCoordinatesAfterStep.get(i - 1).getY());
 
-            diffX = normalizeDiff(diffX);
-            diffY = normalizeDiff(diffY);
-
-            if ((diffX == 0 && prevDIffX != 0) || (diffY == 0 && prevDiffY != 0)) {
-                list.add(makeNativeCoord(prevDIffX, prevDiffY));
-                builder.addPoints(list.getLast());
-                prevDIffX = diffX;
-                prevDiffY = diffY;
+            if ((currentDifferenceByX == 0 && differenceByXWithPrevious != 0) ||
+                    (currentDifferenceByY == 0 && differenceByYWithPrevious != 0)) {
+                keyCoordinates.add(convertToCoordinate(differenceByXWithPrevious, differenceByYWithPrevious));
+                snakeBuilder.addPoints(keyCoordinates.getLast());
+                differenceByXWithPrevious = currentDifferenceByX;
+                differenceByYWithPrevious = currentDifferenceByY;
             } else {
-                prevDIffX += diffX;
-                prevDiffY += diffY;
+                differenceByXWithPrevious += currentDifferenceByX;
+                differenceByYWithPrevious += currentDifferenceByY;
             }
         }
-
-        builder.addPoints(makeNativeCoord(prevDIffX, prevDiffY));
-        return builder.build();
+        snakeBuilder.addPoints(convertToCoordinate(differenceByXWithPrevious, differenceByYWithPrevious));
+        return snakeBuilder.build();
     }
 
-    private int normalizeDiff(int diff) {
-        if (diff * (-1) == getHeightFromGameConfig() - 1) return 1;
-        if (diff == getHeightFromGameConfig() - 1) return -1;
-        return Integer.compare(diff, 0);
+    private int transformYDifferenceAccordingToTorus(int difference) {
+        if (-difference == getHeightFromGameConfig() - 1) {
+            return 1;
+        }
+        if (difference == getHeightFromGameConfig() - 1) {
+            return -1;
+        }
+        return Integer.compare(difference, 0);
     }
 
-    private SnakesProto.GameState.Coord buildCoordinatesBy(int x, int y) {
+    private int transformXDifferenceAccordingToTorus(int difference) {
+        if (-difference == getWidthFromGameConfig() - 1) {
+            return 1;
+        }
+        if (difference == getHeightFromGameConfig() - 1) {
+            return -1;
+        }
+        return Integer.compare(difference, 0);
+    }
+
+    private SnakesProto.GameState.Coord convertToFieldCoordinate(int x, int y) {
         return SnakesProto.GameState.Coord.newBuilder()
                 .setX((x + getWidthFromGameConfig()) % getWidthFromGameConfig())
                 .setY((y + getHeightFromGameConfig()) % getHeightFromGameConfig())
                 .build();
     }
 
-    private SnakesProto.GameState.Coord makeNativeCoord(int x, int y) {
+    private SnakesProto.GameState.Coord convertToCoordinate(int x, int y) {
         return SnakesProto.GameState.Coord.newBuilder().setX(x).setY(y).build();
     }
 
-    public SnakesProto.Direction reversed(SnakesProto.Direction direction) {
+    public void changeSnakeDirectionById(SnakesProto.Direction chosenDirection, int playerId, long directionChangesNumber) {
+        SnakesProto.GameState.Snake playerSnake = null;
+        var zombieSnakeIndicator = SnakesProto.GameState.Snake.SnakeState.ZOMBIE;
+        for (var snake : gameState.getSnakesList()) {
+            if (snake.getPlayerId() == playerId && !snake.getState().equals(zombieSnakeIndicator)) {
+                playerSnake = snake;
+                break;
+            }
+        }
+
+        if (playerSnake != null && !playerSnake.getHeadDirection().equals(getReverseDirectionTo(chosenDirection))) {
+            if (directionChangesNumber > directionChangesNumbersByPlayer.get(playerId)) {
+                directionChangesNumbersByPlayer.put(playerId, directionChangesNumber);
+                snakesDirectionsByPlayer.put(playerSnake.getPlayerId(), chosenDirection);
+            }
+        }
+    }
+
+    private SnakesProto.Direction getReverseDirectionTo(SnakesProto.Direction direction) {
         return switch (direction) {
             case UP -> SnakesProto.Direction.DOWN;
             case DOWN -> SnakesProto.Direction.UP;
@@ -482,28 +527,11 @@ public class GameModel extends Publisher {
         };
     }
 
-    public void changeDirection(SnakesProto.Direction direction, int id, long num) {
-        SnakesProto.GameState.Snake s = null;
-        for (SnakesProto.GameState.Snake snake : gameState.getSnakesList()) {
-            if (snake.getPlayerId() == id && snake.getState() != SnakesProto.GameState.Snake.SnakeState.ZOMBIE) {
-                s = snake;
-                break;
-            }
-        }
-
-        if (s == null) return;
-        if (s.getHeadDirection() != reversed(direction)) {
-            if (num > directionChangesNumbersByPlayer.get(id)) {
-                directionChangesNumbersByPlayer.put(id, num);
-                snakesDirectionsByPlayer.put(s.getPlayerId(), direction);
-            }
-        }
+    public void makePlayerTimestamp(int playerId) {
+        activitiesTimestampsByPlayer.put(playerId, Instant.now());
     }
 
-    public void updatePlayer(int id) {
-        activitiesTimestampsByPlayer.put(id, Instant.now());
-    }
-
+    // TODO: разобраться
     public void repair(int id) {
         snakesAllCoordinatesByPlayer = new HashMap<>();
         snakesDirectionsByPlayer = new HashMap<>();
@@ -524,63 +552,74 @@ public class GameModel extends Publisher {
 
     public void changePlayerGameStatus(int playerId, SnakesProto.NodeRole playerRole,
                                        SnakesProto.GameState.Snake.SnakeState snakeState) {
-        var rewritingPlayers = SnakesProto.GamePlayers.newBuilder();
+        var overwritingPlayers = SnakesProto.GamePlayers.newBuilder();
         for (SnakesProto.GamePlayer existingPlayer : gameState.getPlayers().getPlayersList()) {
             if (existingPlayer.getId() == playerId && playerRole != null) {
-                rewritingPlayers.addPlayers(existingPlayer.toBuilder().setRole(playerRole).build());
+                overwritingPlayers.addPlayers(existingPlayer.toBuilder().setRole(playerRole).build());
             } else {
-                rewritingPlayers.addPlayers(existingPlayer);
+                overwritingPlayers.addPlayers(existingPlayer);
             }
         }
 
-        LinkedList<SnakesProto.GameState.Snake> rewritingSnakes = new LinkedList<>();
+        LinkedList<SnakesProto.GameState.Snake> overwritingSnakes = new LinkedList<>();
         for (var existingSnakes : gameState.getSnakesList()) {
             if (existingSnakes.getPlayerId() == playerId && snakeState != null) {
-                rewritingSnakes.add(existingSnakes.toBuilder().setState(snakeState).build());
+                overwritingSnakes.add(existingSnakes.toBuilder().setState(snakeState).build());
             } else {
-                rewritingSnakes.add(existingSnakes);
+                overwritingSnakes.add(existingSnakes);
             }
         }
 
         SnakesProto.GameState.Builder newGameStateBuilder = gameState.toBuilder();
         newGameStateBuilder.clearSnakes();
-        for (var snake : rewritingSnakes) {
+        for (var snake : overwritingSnakes) {
             newGameStateBuilder.addSnakes(snake);
         }
         this.gameState = newGameStateBuilder.build();
-        this.gameState = gameState.toBuilder().setPlayers(rewritingPlayers).build();
+        this.gameState = gameState.toBuilder().setPlayers(overwritingPlayers).build();
     }
 
-    public SnakesProto.GamePlayer getPlayer(int id) {
-        for (SnakesProto.GamePlayer player : getGameState().getPlayers().getPlayersList()) {
-            if (player.getId() == id) return player;
+    public SnakesProto.GamePlayer getPlayerById(int playerId) {
+        for (var player : gameState.getPlayers().getPlayersList()) {
+            if (player.getId() == playerId) {
+                return player;
+            }
         }
         return null;
     }
 
-    public boolean isAlive(int id) {
-        for (SnakesProto.GameState.Snake snake : gameState.getSnakesList()) {
-            if (snake.getPlayerId() == id && snake.getState() == SnakesProto.GameState.Snake.SnakeState.ALIVE)
+    public boolean isPlayerSnakeAlive(int playerId) {
+        var aliveSnakeIndicator = SnakesProto.GameState.Snake.SnakeState.ALIVE;
+        for (var snake : gameState.getSnakesList()) {
+            if (snake.getPlayerId() == playerId && snake.getState().equals(aliveSnakeIndicator))
                 return true;
         }
         return false;
     }
 
-    public static SnakesProto.GamePlayer getMaster(SnakesProto.GamePlayers players) {
-        for (SnakesProto.GamePlayer player : players.getPlayersList()) {
-            if (player.getRole() == SnakesProto.NodeRole.MASTER) return player;
+    // TODO: throw instead of return null
+    public static SnakesProto.GamePlayer getMasterPlayer(SnakesProto.GamePlayers activePlayers) {
+        var masterPlayerIndicator = SnakesProto.NodeRole.MASTER;
+        for (var player : activePlayers.getPlayersList()) {
+            if (player.getRole().equals(masterPlayerIndicator)) {
+                return player;
+            }
         }
         return null;
     }
 
-    public static SnakesProto.GamePlayer getDeputy(SnakesProto.GamePlayers players) {
-        for (SnakesProto.GamePlayer player : players.getPlayersList()) {
-            if (player.getRole() == SnakesProto.NodeRole.DEPUTY) return player;
+    // TODO: throw instead of return null
+    public static SnakesProto.GamePlayer getDeputyPlayer(SnakesProto.GamePlayers activePlayers) {
+        var deputyPlayerIndicator = SnakesProto.NodeRole.DEPUTY;
+        for (var player : activePlayers.getPlayersList()) {
+            if (player.getRole().equals(deputyPlayerIndicator)) {
+                return player;
+            }
         }
         return null;
     }
 
-    public static SnakesProto.GamePlayer makePlayer(
+    public static SnakesProto.GamePlayer buildGamePlayer(
             int playerId, String playerName, int inetPort, String
             inetAddress, SnakesProto.NodeRole playerRole) {
         return SnakesProto.GamePlayer.newBuilder()

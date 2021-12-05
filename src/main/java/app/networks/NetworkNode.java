@@ -150,8 +150,8 @@ public class NetworkNode extends Subscriber {
         boolean isTime = false;
         int time = gameModel.getGameState().getConfig().getStateDelayMs();
         if (isTimeTo(lastTimeForState, time) && nodeRole == SnakesProto.NodeRole.MASTER) {
-            gameModel.computeNextStep();
-            deputy = GameModel.getDeputy(gameModel.getGameState().getPlayers());
+            gameModel.makeGameNextStep();
+            deputy = GameModel.getDeputyPlayer(gameModel.getGameState().getPlayers());
 
             for (SnakesProto.GamePlayer player : gameModel.getGameState().getPlayers().getPlayersList()) {
                 if (nodeID.hashCode() != player.getId()) {
@@ -210,7 +210,7 @@ public class NetworkNode extends Subscriber {
         for (Map.Entry<Integer, Instant> entry : gameModel.getActivitiesTimestampsByPlayer().entrySet()) {
             if (Instant.now().toEpochMilli() - entry.getValue().toEpochMilli() > gameModel.getGameState().getConfig().getNodeTimeoutMs()) {
 
-                if (gameModel.getPlayer(entry.getKey()).getRole() == SnakesProto.NodeRole.MASTER) {
+                if (gameModel.getPlayerById(entry.getKey()).getRole() == SnakesProto.NodeRole.MASTER) {
                     if (nodeRole == SnakesProto.NodeRole.DEPUTY) {
                         gameModel.repair(nodeID.hashCode());
                         nodeRole = SnakesProto.NodeRole.MASTER;
@@ -219,10 +219,10 @@ public class NetworkNode extends Subscriber {
                         }
                     }
                     if (nodeRole == SnakesProto.NodeRole.NORMAL) {
-                        master = GameModel.getDeputy(gameModel.getGameState().getPlayers());
+                        master = GameModel.getDeputyPlayer(gameModel.getGameState().getPlayers());
                     }
                 }
-                sendPingMsg(gameModel.getPlayer(entry.getKey()));
+                sendPingMsg(gameModel.getPlayerById(entry.getKey()));
             }
         }
     }
@@ -262,7 +262,7 @@ public class NetworkNode extends Subscriber {
                 case ROLE_CHANGE -> roleChangeHandler(message);
                 default -> createAndPutAck(message);
             }
-            gameModel.updatePlayer(message.getSenderId());
+            gameModel.makePlayerTimestamp(message.getSenderId());
         }
     }
 
@@ -273,18 +273,18 @@ public class NetworkNode extends Subscriber {
             if (message.getTypeCase() == SnakesProto.GameMessage.TypeCase.ANNOUNCEMENT) {
                 announcementHandler(message);
             }
-            gameModel.updatePlayer(message.getSenderId());
+            gameModel.makePlayerTimestamp(message.getSenderId());
         }
     }
 
     private void stateHandler(SnakesProto.GameMessage message) {
-        if (master.getId() == Objects.requireNonNull(GameModel.getMaster(message.getState().getState().getPlayers())).getId())
+        if (master.getId() == Objects.requireNonNull(GameModel.getMasterPlayer(message.getState().getState().getPlayers())).getId())
             gameModel.setGameState(message.getState().getState());
         createAndPutAck(message);
     }
 
     private void announcementHandler(SnakesProto.GameMessage announcementMsg) {
-        SnakesProto.GamePlayer master = GameModel.getMaster(announcementMsg.getAnnouncement().getPlayers());
+        SnakesProto.GamePlayer master = GameModel.getMasterPlayer(announcementMsg.getAnnouncement().getPlayers());
         master = Objects.requireNonNull(master).toBuilder().setIpAddress(senderIp.getHostAddress()).build();
 
         int masterPort = master.getPort();
@@ -323,7 +323,7 @@ public class NetworkNode extends Subscriber {
 
     private void steerHandler(SnakesProto.GameMessage message) {
         SnakesProto.Direction d = message.getSteer().getDirection();
-        gameModel.changeDirection(d, message.getSenderId(), message.getMsgSeq());
+        gameModel.changeSnakeDirectionById(d, message.getSenderId(), message.getMsgSeq());
         createAndPutAck(message);
     }
 
@@ -349,7 +349,7 @@ public class NetworkNode extends Subscriber {
     }
 
     private void joinHandler(SnakesProto.GameMessage message) {
-        SnakesProto.GamePlayer newPlayer = GameModel.makePlayer(message.getSenderId(), "", senderPort, senderIp.getHostAddress(), SnakesProto.NodeRole.NORMAL);
+        SnakesProto.GamePlayer newPlayer = GameModel.buildGamePlayer(message.getSenderId(), "", senderPort, senderIp.getHostAddress(), SnakesProto.NodeRole.NORMAL);
         createAndPutAck(message);
         if (gameModel.addNewPlayerToModel(newPlayer) == 1) return;
         if (deputy == null) {
@@ -365,8 +365,8 @@ public class NetworkNode extends Subscriber {
                 .setMsgSeq(message.getMsgSeq())
                 .setSenderId(nodeID.hashCode())
                 .build();
-        CommunicationMessage communicationMessage1 = new CommunicationMessage(mess, GameModel.makePlayer(nodeID.hashCode(), nodeName, myPort, "", nodeRole),
-                GameModel.makePlayer(message.getSenderId(), "", senderPort, senderIp.getHostAddress(), SnakesProto.NodeRole.NORMAL));
+        CommunicationMessage communicationMessage1 = new CommunicationMessage(mess, GameModel.buildGamePlayer(nodeID.hashCode(), nodeName, myPort, "", nodeRole),
+                GameModel.buildGamePlayer(message.getSenderId(), "", senderPort, senderIp.getHostAddress(), SnakesProto.NodeRole.NORMAL));
         messages.put(communicationMessage1, Instant.now());
 
         System.out.println(messages.size());
@@ -390,7 +390,7 @@ public class NetworkNode extends Subscriber {
                 .setSenderId(nodeID.hashCode())
                 .setReceiverId(to.getId())
                 .build();
-        CommunicationMessage mes = new CommunicationMessage(message, GameModel.makePlayer(nodeID.hashCode(), nodeName, myPort, "", nodeRole), to);
+        CommunicationMessage mes = new CommunicationMessage(message, GameModel.buildGamePlayer(nodeID.hashCode(), nodeName, myPort, "", nodeRole), to);
         synchronized (messages) {
             messages.put(mes, Instant.now());
         }
@@ -403,7 +403,7 @@ public class NetworkNode extends Subscriber {
                 .setSenderId(nodeID.hashCode())
                 .setReceiverId(to.getId())
                 .build();
-        CommunicationMessage mes = new CommunicationMessage(message, GameModel.makePlayer(nodeID.hashCode(), nodeName, myPort, "", nodeRole), to);
+        CommunicationMessage mes = new CommunicationMessage(message, GameModel.buildGamePlayer(nodeID.hashCode(), nodeName, myPort, "", nodeRole), to);
         messages.put(mes, Instant.now());
     }
 
@@ -419,7 +419,7 @@ public class NetworkNode extends Subscriber {
                 .setSenderId(nodeID.hashCode())
                 .setReceiverId(to.getId())
                 .build();
-        CommunicationMessage mes = new CommunicationMessage(message, GameModel.makePlayer(nodeID.hashCode(), nodeName, myPort, "", nodeRole), to);
+        CommunicationMessage mes = new CommunicationMessage(message, GameModel.buildGamePlayer(nodeID.hashCode(), nodeName, myPort, "", nodeRole), to);
         messages.put(mes, Instant.now());
     }
 
@@ -433,7 +433,7 @@ public class NetworkNode extends Subscriber {
                 .setSenderId(nodeID.hashCode())
                 .setReceiverId(master.getId())
                 .build();
-        CommunicationMessage mes = new CommunicationMessage(message, GameModel.makePlayer(nodeID.hashCode(), nodeName, myPort, "", nodeRole), null);
+        CommunicationMessage mes = new CommunicationMessage(message, GameModel.buildGamePlayer(nodeID.hashCode(), nodeName, myPort, "", nodeRole), null);
         messages.put(mes, Instant.now());
     }
 
@@ -443,7 +443,7 @@ public class NetworkNode extends Subscriber {
 
     public void changeDirection(SnakesProto.Direction d) {
         if (nodeRole == SnakesProto.NodeRole.MASTER) {
-            gameModel.changeDirection(d, gameModel.getSessionMasterId(), gameModel.getDirectionChangesNumbersByPlayer().get(gameModel.getSessionMasterId()) + 1);
+            gameModel.changeSnakeDirectionById(d, gameModel.getSessionMasterId(), gameModel.getDirectionChangesNumbersByPlayer().get(gameModel.getSessionMasterId()) + 1);
         }
         if (nodeRole == SnakesProto.NodeRole.NORMAL || nodeRole == SnakesProto.NodeRole.DEPUTY) {
             sendSteerMsg(d);
@@ -451,7 +451,7 @@ public class NetworkNode extends Subscriber {
     }
 
     public void changeRole(SnakesProto.NodeRole nodeRole) {
-        master = GameModel.makePlayer(nodeID.hashCode(), nodeName, 0, myAddress.getHostAddress(), SnakesProto.NodeRole.MASTER);
+        master = GameModel.buildGamePlayer(nodeID.hashCode(), nodeName, 0, myAddress.getHostAddress(), SnakesProto.NodeRole.MASTER);
         this.nodeRole = nodeRole;
     }
 }

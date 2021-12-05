@@ -83,4 +83,14 @@ public class CmdArgsParser {
     public Options getCmdOptions() {
         return cmdOptions;
     }
+
+    @Override
+    public String toString() {
+        return "CmdArgsParser{" +
+                "cmdOptions=" + cmdOptions +
+                ", playerName='" + playerName + '\'' +
+                ", hostInetAddress='" + hostInetAddress + '\'' +
+                ", hostPort=" + hostPort +
+                '}';
+    }
 }
