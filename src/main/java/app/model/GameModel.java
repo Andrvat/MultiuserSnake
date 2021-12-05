@@ -1,5 +1,6 @@
 package app.model;
 
+import app.exceptions.ImpossibleOperationException;
 import app.utilities.Publisher;
 import proto.SnakesProto;
 
@@ -212,17 +213,6 @@ public class GameModel extends Publisher {
         return true;
     }
 
-    private int getAliveSnakesNumber() {
-        int aliveSnakesNumber = 0;
-        var aliveSnakeIndicator = SnakesProto.GameState.Snake.SnakeState.ALIVE;
-        for (var snake : gameState.getSnakesList()) {
-            if (snake.getState().equals(aliveSnakeIndicator)) {
-                aliveSnakesNumber++;
-            }
-        }
-        return aliveSnakesNumber;
-    }
-
     public void makeGameNextStep() {
         LinkedList<SnakesProto.GameState.Snake> aliveSnakes = new LinkedList<>();
         for (var snake : gameState.getSnakesList()) {
@@ -244,37 +234,64 @@ public class GameModel extends Publisher {
         for (int i = 0; i < getWidthFromGameConfig(); i++) {
             for (int j = 0; j < getHeightFromGameConfig(); j++) {
                 var trackedCoordinate = convertToFieldCoordinate(i, j);
+                boolean isTrackedCoordinateFree = true;
                 for (var snake : gameState.getSnakesList()) {
                     for (var snakeCoordinate : snake.getPointsList()) {
-                        if (!trackedCoordinate.equals(snakeCoordinate)) {
-                            freeCoordinates.add(trackedCoordinate);
+                        if (trackedCoordinate.equals(snakeCoordinate)) {
+                            isTrackedCoordinateFree = false;
+                            break;
+                        }
+                    }
+                    if (!isTrackedCoordinateFree) {
+                        break;
+                    }
+                }
+                if (isTrackedCoordinateFree) {
+                    for (SnakesProto.GameState.Coord foodCoordinate : gameState.getFoodsList()) {
+                        if (trackedCoordinate.equals(foodCoordinate)) {
+                            isTrackedCoordinateFree = false;
+                            break;
                         }
                     }
                 }
-                for (SnakesProto.GameState.Coord coord : gameState.getFoodsList()) {
-                    if (!trackedCoordinate.equals(coord)) {
-                        freeCoordinates.add(trackedCoordinate);
-                    }
+                if (isTrackedCoordinateFree) {
+                    freeCoordinates.add(trackedCoordinate);
                 }
             }
         }
-        SnakesProto.GameState.Builder builder = gameState.toBuilder();
-        int foodCount = gameState.getFoodsCount();
-        while (foodCount < gameState.getConfig().getFoodStatic() + gameState.getConfig().getFoodPerPlayer() * getAliveSnakesNumber()) {
-            SnakesProto.GameState.Coord food = tryAddFruit(freeCoordinates);
-            if (food == null) break;
-
-            builder.addFoods(food);
-            freeCoordinates.remove(food);
-            foodCount++;
+        var gameStateBuilder = gameState.toBuilder();
+        int totalFoodAmount = gameState.getFoodsCount();
+        while (totalFoodAmount < gameState.getConfig().getFoodStatic() +
+                gameState.getConfig().getFoodPerPlayer() * getAliveSnakesNumber()) {
+            try {
+                SnakesProto.GameState.Coord foodCoordinate = getRandomFreeCoordinate(freeCoordinates);
+                gameStateBuilder.addFoods(foodCoordinate);
+                freeCoordinates.remove(foodCoordinate);
+                totalFoodAmount++;
+            } catch (ImpossibleOperationException ignored) {
+                break;
+            }
         }
-        gameState = builder.build();
+        gameState = gameStateBuilder.build();
     }
 
-    public SnakesProto.GameState.Coord tryAddFruit(ArrayList<SnakesProto.GameState.Coord> coords) {
-        if (coords.size() == 0) return null;
-        Random random = new Random();
-        return coords.get(abs(random.nextInt()) % coords.size());
+    private int getAliveSnakesNumber() {
+        int aliveSnakesNumber = 0;
+        var aliveSnakeIndicator = SnakesProto.GameState.Snake.SnakeState.ALIVE;
+        for (var snake : gameState.getSnakesList()) {
+            if (snake.getState().equals(aliveSnakeIndicator)) {
+                aliveSnakesNumber++;
+            }
+        }
+        return aliveSnakesNumber;
+    }
+
+    public SnakesProto.GameState.Coord getRandomFreeCoordinate(
+            ArrayList<SnakesProto.GameState.Coord> freeCoordinates) throws ImpossibleOperationException {
+        if (freeCoordinates.isEmpty()) {
+            throw new ImpossibleOperationException();
+        }
+        return freeCoordinates.get(new Random().nextInt(freeCoordinates.size()));
     }
 
     public SnakesProto.GameState.Snake makeSnakeStep(SnakesProto.GameState.Snake snake) {
@@ -531,21 +548,20 @@ public class GameModel extends Publisher {
         activitiesTimestampsByPlayer.put(playerId, Instant.now());
     }
 
-    // TODO: разобраться
-    public void repair(int id) {
+    public void rebuiltGameModel(int playerId) {
         snakesAllCoordinatesByPlayer = new HashMap<>();
         snakesDirectionsByPlayer = new HashMap<>();
         directionChangesNumbersByPlayer = new HashMap<>();
         activitiesTimestampsByPlayer = new HashMap<>();
 
         sessionGamePlayers = gameState.getPlayers();
-        changePlayerGameStatus(id, SnakesProto.NodeRole.MASTER, SnakesProto.GameState.Snake.SnakeState.ALIVE);
+        this.changePlayerGameStatus(playerId, SnakesProto.NodeRole.MASTER, SnakesProto.GameState.Snake.SnakeState.ALIVE);
 
-        for (SnakesProto.GameState.Snake snake : gameState.getSnakesList()) {
+        for (var snake : gameState.getSnakesList()) {
             snakesAllCoordinatesByPlayer.put(snake.getPlayerId(), getSnakeAllCoordinates(snake));
         }
-        for (SnakesProto.GamePlayer player : gameState.getPlayers().getPlayersList()) {
-            directionChangesNumbersByPlayer.put(player.getId(), 0L);
+        for (var player : gameState.getPlayers().getPlayersList()) {
+            directionChangesNumbersByPlayer.put(player.getId(), ZERO_DIRECTION_CHANGES);
             activitiesTimestampsByPlayer.put(player.getId(), Instant.now());
         }
     }

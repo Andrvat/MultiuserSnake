@@ -18,12 +18,11 @@ public class GameLauncher {
         CmdArgsParser cmdArgsParser = new CmdArgsParser();
         try {
             cmdArgsParser.parseArguments(args);
-            UUID uuid = UUID.randomUUID();
             GameModel gameModel = new GameModel();
             NetworkNode networkNode = new NetworkNode(gameModel, SnakesProto.NodeRole.NORMAL,
                     cmdArgsParser.getPlayerName(),
                     InetAddress.getByName(cmdArgsParser.getHostInetAddress()),
-                    cmdArgsParser.getHostPort(), uuid);
+                    cmdArgsParser.getHostPort(), UUID.randomUUID());
             networkNode.start();
         } catch (Exception exception) {
             System.err.println(cmdArgsParser);

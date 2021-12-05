@@ -212,7 +212,7 @@ public class NetworkNode extends Subscriber {
 
                 if (gameModel.getPlayerById(entry.getKey()).getRole() == SnakesProto.NodeRole.MASTER) {
                     if (nodeRole == SnakesProto.NodeRole.DEPUTY) {
-                        gameModel.repair(nodeID.hashCode());
+                        gameModel.rebuiltGameModel(nodeID.hashCode());
                         nodeRole = SnakesProto.NodeRole.MASTER;
                         for (SnakesProto.GamePlayer player : gameModel.getGameState().getPlayers().getPlayersList()) {
                             sendChangeRoleMsg(player, SnakesProto.NodeRole.MASTER, SnakesProto.NodeRole.NORMAL);
@@ -315,7 +315,7 @@ public class NetworkNode extends Subscriber {
             }
             if (message.getRoleChange().getReceiverRole() == SnakesProto.NodeRole.MASTER) {
                 nodeRole = SnakesProto.NodeRole.MASTER;
-                gameModel.repair(nodeID.hashCode());
+                gameModel.rebuiltGameModel(nodeID.hashCode());
             }
         }
         createAndPutAck(message);
