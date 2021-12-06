@@ -6,6 +6,7 @@ import proto.SnakesProto;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static java.lang.Math.abs;
 
@@ -15,7 +16,7 @@ public class GameModel extends Publisher {
     private static final int SNAKE_HEAD_INDEX = 0;
 
     private HashMap<Integer, Long> directionChangesNumbersByPlayer = new HashMap<>();
-    private HashMap<Integer, Instant> activitiesTimestampsByPlayer = new HashMap<>();
+    private ConcurrentHashMap<Integer, Instant> activitiesTimestampsByPlayer = new ConcurrentHashMap<>();
     private HashMap<Integer, LinkedList<SnakesProto.GameState.Coord>> snakesAllCoordinatesByPlayer = new HashMap<>();
     private HashMap<Integer, SnakesProto.Direction> snakesDirectionsByPlayer = new HashMap<>();
     private SnakesProto.GamePlayers sessionGamePlayers = SnakesProto.GamePlayers.newBuilder().build();
@@ -64,7 +65,7 @@ public class GameModel extends Publisher {
         return directionChangesNumbersByPlayer;
     }
 
-    public HashMap<Integer, Instant> getActivitiesTimestampsByPlayer() {
+    public ConcurrentHashMap<Integer, Instant> getActivitiesTimestampsByPlayer() {
         return activitiesTimestampsByPlayer;
     }
 
@@ -94,7 +95,7 @@ public class GameModel extends Publisher {
         this.snakesAllCoordinatesByPlayer = new HashMap<>();
         this.snakesDirectionsByPlayer = new HashMap<>();
         this.directionChangesNumbersByPlayer = new HashMap<>();
-        this.activitiesTimestampsByPlayer = new HashMap<>();
+        this.activitiesTimestampsByPlayer = new ConcurrentHashMap<>();
         this.sessionMasterId = playerId;
         this.changeGameStateBy(gameConfig);
         SnakesProto.GamePlayer me = SnakesProto.GamePlayer.newBuilder()
@@ -119,7 +120,7 @@ public class GameModel extends Publisher {
     }
 
     // TODO: магические константы (проверить на соответствие return значений)
-    public int addNewPlayerToModel(SnakesProto.GamePlayer newPlayer) {
+    public void addNewPlayerToModel(SnakesProto.GamePlayer newPlayer) {
         boolean isPlayerUnknown = true;
         for (SnakesProto.GamePlayer existingPlayer : gameState.getPlayers().getPlayersList()) {
             if (existingPlayer.getId() == newPlayer.getId()) {
@@ -143,7 +144,6 @@ public class GameModel extends Publisher {
             sessionGamePlayers = gameState.getPlayers().toBuilder().addPlayers(newPlayer).build();
             gameState = gameState.toBuilder().setPlayers(sessionGamePlayers).build();
         }
-        return (snake == null) ? 2 : 0;
     }
 
     private SnakesProto.GameState.Snake addSnakeIfPossible(int playerId) {
@@ -552,7 +552,7 @@ public class GameModel extends Publisher {
         snakesAllCoordinatesByPlayer = new HashMap<>();
         snakesDirectionsByPlayer = new HashMap<>();
         directionChangesNumbersByPlayer = new HashMap<>();
-        activitiesTimestampsByPlayer = new HashMap<>();
+        activitiesTimestampsByPlayer = new ConcurrentHashMap<>();
 
         sessionGamePlayers = gameState.getPlayers();
         this.changePlayerGameStatus(playerId, SnakesProto.NodeRole.MASTER, SnakesProto.GameState.Snake.SnakeState.ALIVE);
@@ -611,40 +611,5 @@ public class GameModel extends Publisher {
                 return true;
         }
         return false;
-    }
-
-    // TODO: throw instead of return null
-    public static SnakesProto.GamePlayer getMasterPlayer(SnakesProto.GamePlayers activePlayers) {
-        var masterPlayerIndicator = SnakesProto.NodeRole.MASTER;
-        for (var player : activePlayers.getPlayersList()) {
-            if (player.getRole().equals(masterPlayerIndicator)) {
-                return player;
-            }
-        }
-        return null;
-    }
-
-    // TODO: throw instead of return null
-    public static SnakesProto.GamePlayer getDeputyPlayer(SnakesProto.GamePlayers activePlayers) {
-        var deputyPlayerIndicator = SnakesProto.NodeRole.DEPUTY;
-        for (var player : activePlayers.getPlayersList()) {
-            if (player.getRole().equals(deputyPlayerIndicator)) {
-                return player;
-            }
-        }
-        return null;
-    }
-
-    public static SnakesProto.GamePlayer buildGamePlayer(
-            int playerId, String playerName, int inetPort, String
-            inetAddress, SnakesProto.NodeRole playerRole) {
-        return SnakesProto.GamePlayer.newBuilder()
-                .setId(playerId)
-                .setName(playerName)
-                .setPort(inetPort)
-                .setRole(playerRole)
-                .setIpAddress(inetAddress)
-                .setScore(0)
-                .build();
     }
 }

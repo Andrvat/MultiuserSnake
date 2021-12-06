@@ -24,7 +24,7 @@ public class GameController {
                 .setPingDelayMs(100)
                 .setNodeTimeoutMs(9000)
                 .build();
-        gameModel.launchNewGameAsMaster(gameConfig, networkNode.getNodeName(), networkNode.nodeID.hashCode(), networkNode.getMyPort());
+        gameModel.launchNewGameAsMaster(gameConfig, networkNode.getNodeName(), networkNode.getNodeId().hashCode(), networkNode.getMyPort());
         networkNode.changeRole(SnakesProto.NodeRole.MASTER);
         System.out.println("NEW GAME!");
     }
@@ -40,7 +40,7 @@ public class GameController {
                 .setPingDelayMs(100)
                 .setNodeTimeoutMs(9000)
                 .build();
-        gameModel.launchNewGameAsMaster(gameConfig, networkNode.getNodeName(), networkNode.nodeID.hashCode(), networkNode.getMyPort());
+        gameModel.launchNewGameAsMaster(gameConfig, networkNode.getNodeName(), networkNode.getNodeId().hashCode(), networkNode.getMyPort());
         networkNode.changeRole(SnakesProto.NodeRole.MASTER);
         System.out.println("NEW GAME!");
     }
@@ -58,10 +58,10 @@ public class GameController {
     }
 
     public void exit() {
-        networkNode.sendChangeRoleMsg(null, SnakesProto.NodeRole.VIEWER, SnakesProto.NodeRole.VIEWER);
+        networkNode.sendRoleChangeMessage(null, SnakesProto.NodeRole.VIEWER, SnakesProto.NodeRole.VIEWER);
     }
 
     public boolean checkAlive() {
-        return gameModel.isPlayerSnakeAlive(networkNode.nodeID.hashCode());
+        return gameModel.isPlayerSnakeAlive(networkNode.getNodeId().hashCode());
     }
 }

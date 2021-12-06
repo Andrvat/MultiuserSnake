@@ -16,19 +16,19 @@ public class ViewController extends Subscriber {
     int w = 1600;
     int h = w / 2;
 
-    public ViewController(GameModel gameModel, NetworkNode networkNode){
+    public ViewController(GameModel gameModel, NetworkNode networkNode) {
         super(gameModel);
         this.networkNode = networkNode;
         gameController = new GameController(gameModel, networkNode);
-        gameDisplay = new GameDisplay(w, h, gameModel.getWidthFromGameConfig(), gameModel.getHeightFromGameConfig(), gameController, gameModel, networkNode.nodeID.hashCode());
+        gameDisplay = new GameDisplay(w, h, gameModel.getWidthFromGameConfig(), gameModel.getHeightFromGameConfig(), gameController, gameModel, networkNode.getNodeId().hashCode());
     }
 
     @Override
-    public void inform(){
+    public void update() {
         gameDisplay.update();
     }
 
-    public void updateAnn(ConcurrentHashMap<CommunicationMessage, Instant> ann){
+    public void updateAnn(ConcurrentHashMap<CommunicationMessage, Instant> ann) {
         gameDisplay.updateAnn(ann);
     }
 }

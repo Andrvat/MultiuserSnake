@@ -1,5 +1,6 @@
 package app.networks;
 
+import java.io.IOException;
 import java.net.*;
 import java.time.Instant;
 import java.util.Map;
@@ -8,75 +9,89 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import app.model.GameModel;
+import app.utilities.DebugPrinter;
+import app.utilities.GamePlayersMaker;
 import app.view.ViewController;
 import app.utilities.notifications.Subscriber;
+import lombok.Builder;
 import proto.SnakesProto;
 
 public class NetworkNode extends Subscriber {
+    private static final String MULTICAST_IP = "239.192.0.4";
+    private static final int MULTICAST_PORT = 9192;
+    private static final int TIMEOUT = 3000;
+
     private final String nodeName;
     private SnakesProto.NodeRole nodeRole;
+    private final UUID nodeId;
 
-    private static final String multicastIP = "239.192.0.4";
-    private static final int multicastPort = 9192;
-    private InetAddress senderIp;
+    private InetAddress senderInetAddress;
     private int senderPort;
-    private static final int timeout = 3000;
-    private final InetAddress myAddress;
+
+    private final InetAddress myInetAddress;
     private final int myPort;
+
     private final MulticastSocket multicastSocket;
     private final DatagramSocket datagramSocket;
+    private DatagramPacket sendingDatagramPacket;
 
     private final GameModel gameModel;
     private final ViewController viewController;
 
-    private SnakesProto.GamePlayer master;
-    private SnakesProto.GamePlayer deputy = null;
+    private SnakesProto.GamePlayer masterPlayer;
+    private SnakesProto.GamePlayer deputyPlayer = null;
 
-    private static int stateNumber = 0;
-    private long lastTimeForAnn, lastTimeForState, getLastTimeForSend;
+    private static int gameStateNumber = 0;
 
-    private final ConcurrentHashMap<CommunicationMessage, Instant> announcements = new ConcurrentHashMap<>();
-    public final ConcurrentHashMap<CommunicationMessage, Instant> messages = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<CommunicationMessage, Instant> toResponse = new ConcurrentHashMap<>();
+    private long lastAnnouncementTimestamp;
+    private long lastStateTimestamp;
+    private long lastSentMessageTimestamp;
 
-    DatagramPacket datagramPacket;
-    public UUID nodeID;
+    private final ConcurrentHashMap<CommunicationMessage, Instant> announcementsTimestamps = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<CommunicationMessage, Instant> requiredSendingMessages = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<CommunicationMessage, Instant> requiredConfirmationMessages = new ConcurrentHashMap<>();
 
-    public String getNodeName() {
-        return nodeName;
-    }
-
-    public int getMyPort() {
-        return myPort;
-    }
-
-    public NetworkNode(GameModel gameModel, SnakesProto.NodeRole nodeRole, String name, InetAddress address, int portN, UUID uuid) throws Exception {
+    @Builder
+    public NetworkNode(GameModel gameModel, SnakesProto.NodeRole nodeRole, String nodeName,
+                       InetAddress myInetAddress, int myPort, UUID nodeId) throws Exception {
         super(gameModel);
-
-        this.nodeID = uuid;
-        myAddress = address;
-        myPort = portN;
-
         this.gameModel = gameModel;
-        viewController = new ViewController(this.gameModel, this);
         this.nodeRole = nodeRole;
-        this.nodeName = name;
+        this.nodeName = nodeName;
+        this.myInetAddress = myInetAddress;
+        this.myPort = myPort;
+        this.nodeId = nodeId;
 
-        multicastSocket = new MulticastSocket(multicastPort);
-        multicastSocket.joinGroup(InetAddress.getByName(multicastIP));
-        multicastSocket.setSoTimeout(timeout);
+        viewController = new ViewController(this.gameModel, this);
 
-        datagramSocket = new DatagramSocket(portN, address);
-        datagramSocket.setSoTimeout(timeout);
+        multicastSocket = new MulticastSocket(MULTICAST_PORT);
+        datagramSocket = new DatagramSocket(myPort, myInetAddress);
+        connectMulticastSocketToGroup();
+        setTimeoutsForSockets();
     }
 
-    public void start() {
-        UnicastReceiver unicastReceiver = new UnicastReceiver(datagramSocket, this);
-        MulticastReceiver multicastReceiver = new MulticastReceiver(multicastSocket, this);
+    private void connectMulticastSocketToGroup() throws IOException {
+        multicastSocket.joinGroup(InetAddress.getByName(MULTICAST_IP));
+    }
 
-        lastTimeForAnn = Instant.now().toEpochMilli();
-        lastTimeForState = Instant.now().toEpochMilli();
-        getLastTimeForSend = Instant.now().toEpochMilli();
+    private void setTimeoutsForSockets() throws SocketException {
+        multicastSocket.setSoTimeout(TIMEOUT);
+        datagramSocket.setSoTimeout(TIMEOUT);
+    }
+
+    public void startCommunicating() {
+        UnicastReceiver unicastReceiver = UnicastReceiver.builder()
+                .datagramSocket(datagramSocket)
+                .networkNode(this)
+                .build();
+        MulticastReceiver multicastReceiver = MulticastReceiver.builder()
+                .multicastSocket(multicastSocket)
+                .networkNode(this)
+                .build();
+
+        lastAnnouncementTimestamp = getEpochMillisBySystemClockInstant();
+        lastStateTimestamp = getEpochMillisBySystemClockInstant();
+        lastSentMessageTimestamp = getEpochMillisBySystemClockInstant();
 
         unicastReceiver.start();
         multicastReceiver.start();
@@ -86,9 +101,8 @@ public class NetworkNode extends Subscriber {
         }
     }
 
-    public static int incState() {
-        System.out.println("stateNumber = " + stateNumber);
-        return stateNumber++;
+    private long getEpochMillisBySystemClockInstant() {
+        return Instant.now().toEpochMilli();
     }
 
     private boolean isTimeTo(long time, int period) {
@@ -96,33 +110,32 @@ public class NetworkNode extends Subscriber {
     }
 
     private void sendMessages() {
-        synchronized (messages) {
-            sendMail();
-        }
+        sendMail();
+
         sendResponses();
-        if (isTimeTo(lastTimeForAnn, 3000)) {
+        if (isTimeTo(lastAnnouncementTimestamp, 3000)) {
             if (nodeRole == SnakesProto.NodeRole.MASTER) {
                 sendAnnouncements();
-                lastTimeForAnn = Instant.now().toEpochMilli();
+                lastAnnouncementTimestamp = Instant.now().toEpochMilli();
             }
         }
     }
 
     private void sendResponses() {
-        if (isTimeTo(getLastTimeForSend, gameModel.getGameState().getConfig().getPingDelayMs())) {
+        if (isTimeTo(lastSentMessageTimestamp, gameModel.getGameState().getConfig().getPingDelayMs())) {
             checkPlayerActivity();
-            getLastTimeForSend = Instant.now().toEpochMilli();
+            lastSentMessageTimestamp = Instant.now().toEpochMilli();
             System.gc();
         } else return;
 
-        for (Map.Entry<CommunicationMessage, Instant> entry : messages.entrySet()) {
+        for (Map.Entry<CommunicationMessage, Instant> entry : requiredSendingMessages.entrySet()) {
             try {
                 CommunicationMessage m = entry.getKey();
                 if (m.getReceiverPlayer() == null) {
-                    if (master != null)
-                        m.setReceiverPlayer(master);
+                    if (masterPlayer != null)
+                        m.setReceiverPlayer(masterPlayer);
                     else {
-                        messages.remove(m);
+                        requiredSendingMessages.remove(m);
                         continue;
                     }
                 }
@@ -130,12 +143,12 @@ public class NetworkNode extends Subscriber {
                 m.setMessage(m.getMessage().toBuilder().
                         setState(SnakesProto.GameMessage.StateMsg.newBuilder().setState(gameModel.getGameState())).build());
 
-                datagramPacket =
+                sendingDatagramPacket =
                         new DatagramPacket(m.getMessage().toByteArray(),
                                 m.getMessage().toByteArray().length,
                                 InetAddress.getByName(m.getReceiverPlayer().getIpAddress()),
                                 m.getReceiverPlayer().getPort());
-                datagramSocket.send(datagramPacket);
+                datagramSocket.send(sendingDatagramPacket);
 
             } catch (Exception e) {
                 e.printStackTrace();
@@ -146,55 +159,55 @@ public class NetworkNode extends Subscriber {
     private void sendMail() {
         boolean isTime = false;
         int time = gameModel.getGameState().getConfig().getStateDelayMs();
-        if (isTimeTo(lastTimeForState, time) && nodeRole == SnakesProto.NodeRole.MASTER) {
+        if (isTimeTo(lastStateTimestamp, time) && nodeRole == SnakesProto.NodeRole.MASTER) {
             gameModel.makeGameNextStep();
-            deputy = GameModel.getDeputyPlayer(gameModel.getGameState().getPlayers());
+            deputyPlayer = GamePlayersMaker.getDeputyPlayerFromList(gameModel.getGameState().getPlayers());
             for (SnakesProto.GamePlayer player : gameModel.getGameState().getPlayers().getPlayersList()) {
-                if (nodeID.hashCode() != player.getId()) {
-                    messages.put(CommunicationMessage.builder()
+                if (nodeId.hashCode() != player.getId()) {
+                    requiredSendingMessages.put(CommunicationMessage.builder()
                             .message(null)
-                            .senderPlayer(master)
+                            .senderPlayer(masterPlayer)
                             .receiverPlayer(player).build(), Instant.now());
                 }
             }
             isTime = true;
-            lastTimeForState = Instant.now().toEpochMilli();
+            lastStateTimestamp = Instant.now().toEpochMilli();
         }
 
-        for (Map.Entry<CommunicationMessage, Instant> entry : messages.entrySet()) {
+        for (Map.Entry<CommunicationMessage, Instant> entry : requiredSendingMessages.entrySet()) {
             try {
                 CommunicationMessage m = entry.getKey();
                 if (m.getReceiverPlayer() == null) {
-                    if (master != null)
-                        m.setReceiverPlayer(master);
+                    if (masterPlayer != null)
+                        m.setReceiverPlayer(masterPlayer);
                     else {
-                        messages.remove(m);
+                        requiredSendingMessages.remove(m);
                         continue;
                     }
                 }
 
                 if (m.getMessage() == null) {
                     m.setMessage(SnakesProto.GameMessage.newBuilder()
-                            .setMsgSeq(incState())
-                            .setSenderId(nodeID.hashCode())
+                            .setMsgSeq(incrementStateNumber())
+                            .setSenderId(nodeId.hashCode())
                             .setState(SnakesProto.GameMessage.StateMsg.newBuilder().setState(gameModel.getGameState()).build())
                             .build());
                 }
 
-                datagramPacket = new DatagramPacket(
+                sendingDatagramPacket = new DatagramPacket(
                         m.getMessage().toByteArray(), m.getMessage().toByteArray().length, InetAddress.getByName(m.getReceiverPlayer().getIpAddress()), m.getReceiverPlayer().getPort());
 
                 if (m.getMessage().getTypeCase() == SnakesProto.GameMessage.TypeCase.STATE) {
 
                     if (isTime) {
-                        datagramSocket.send(datagramPacket);
+                        datagramSocket.send(sendingDatagramPacket);
                     }
                 } else {
-                    datagramSocket.send(datagramPacket);
+                    datagramSocket.send(sendingDatagramPacket);
                     if (m.getMessage().getTypeCase() != SnakesProto.GameMessage.TypeCase.ACK) {
-                        toResponse.put(m, Instant.now());
+                        requiredConfirmationMessages.put(m, Instant.now());
                     }
-                    messages.remove(m);
+                    requiredSendingMessages.remove(m);
                 }
 
             } catch (Exception e) {
@@ -212,14 +225,14 @@ public class NetworkNode extends Subscriber {
 
                 if (gameModel.getPlayerById(entry.getKey()).getRole() == SnakesProto.NodeRole.MASTER) {
                     if (nodeRole == SnakesProto.NodeRole.DEPUTY) {
-                        gameModel.rebuiltGameModel(nodeID.hashCode());
+                        gameModel.rebuiltGameModel(nodeId.hashCode());
                         nodeRole = SnakesProto.NodeRole.MASTER;
                         for (SnakesProto.GamePlayer player : gameModel.getGameState().getPlayers().getPlayersList()) {
-                            sendChangeRoleMsg(player, SnakesProto.NodeRole.MASTER, SnakesProto.NodeRole.NORMAL);
+                            sendRoleChangeMessage(player, SnakesProto.NodeRole.MASTER, SnakesProto.NodeRole.NORMAL);
                         }
                     }
                     if (nodeRole == SnakesProto.NodeRole.NORMAL) {
-                        master = GameModel.getDeputyPlayer(gameModel.getGameState().getPlayers());
+                        masterPlayer = GamePlayersMaker.getDeputyPlayerFromList(gameModel.getGameState().getPlayers());
                     }
                 }
                 sendPingMsg(gameModel.getPlayerById(entry.getKey()));
@@ -243,67 +256,68 @@ public class NetworkNode extends Subscriber {
 
         try {
             data = mess.toByteArray();
-            datagramPacket = new DatagramPacket(data, data.length, InetAddress.getByName(multicastIP), multicastPort);
-            multicastSocket.send(datagramPacket);
+            sendingDatagramPacket = new DatagramPacket(data, data.length, InetAddress.getByName(MULTICAST_IP), MULTICAST_PORT);
+            multicastSocket.send(sendingDatagramPacket);
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    public void receiveUnicast(SnakesProto.GameMessage message, InetAddress senderIp, int senderPort) {
-        this.senderIp = senderIp;
+    public void handleReceivedUnicastMessage(SnakesProto.GameMessage message, InetAddress senderInetAddress, int senderPort) {
+        this.senderInetAddress = senderInetAddress;
         this.senderPort = senderPort;
         if (message != null) {
             switch (message.getTypeCase()) {
-                case ACK -> askHandler(message);
-                case JOIN -> joinHandler(message);
+                case ACK -> handleAckMessage(message);
+                case JOIN -> handleJoinMessage(message);
                 case STEER -> steerHandler(message);
                 case STATE -> stateHandler(message);
                 case ROLE_CHANGE -> roleChangeHandler(message);
-                default -> createAndPutAck(message);
+                default -> sendAckMessage(message);
             }
             gameModel.makePlayerTimestamp(message.getSenderId());
         }
     }
 
-    public void receiveMulticast(SnakesProto.GameMessage message, InetAddress senderIp, int senderPort) {
-        this.senderIp = senderIp;
+    public void handleReceivedMulticastMessage(SnakesProto.GameMessage message, InetAddress senderInetAddress, int senderPort) {
+        this.senderInetAddress = senderInetAddress;
         this.senderPort = senderPort;
         if (message != null) {
+            var announcementMessageIndicator = SnakesProto.GameMessage.TypeCase.ANNOUNCEMENT;
             if (message.getTypeCase() == SnakesProto.GameMessage.TypeCase.ANNOUNCEMENT) {
-                announcementHandler(message);
+                handleAnnouncementMessage(message);
             }
             gameModel.makePlayerTimestamp(message.getSenderId());
+        }
+    }
+
+    private void handleAnnouncementMessage(SnakesProto.GameMessage message) {
+        var currentMasterPlayer = GamePlayersMaker.getMasterPlayerFromList(message.getAnnouncement().getPlayers());
+        currentMasterPlayer = Objects.requireNonNull(currentMasterPlayer).toBuilder()
+                .setIpAddress(senderInetAddress.getHostAddress()).build();
+
+        int currentMasterPlayerPort = currentMasterPlayer.getPort();
+        CommunicationMessage communicationMessage = CommunicationMessage.builder()
+                .message(message)
+                .senderPlayer(currentMasterPlayer)
+                .receiverPlayer(null).build();
+        if (!myInetAddress.equals(senderInetAddress) || myPort != currentMasterPlayerPort) {
+            // Удаляем данные о старой игре мастера. Мастер создал новую игру.
+            for (var timestamp : announcementsTimestamps.entrySet()) {
+                if (timestamp.getKey().getSenderPlayer().getId() == currentMasterPlayer.getId()) {
+                    announcementsTimestamps.remove(timestamp.getKey());
+                    announcementsTimestamps.put(communicationMessage, Instant.now());
+                    break;
+                }
+            }
+            announcementsTimestamps.put(communicationMessage, Instant.now());
         }
     }
 
     private void stateHandler(SnakesProto.GameMessage message) {
-        if (master.getId() == Objects.requireNonNull(GameModel.getMasterPlayer(message.getState().getState().getPlayers())).getId())
+        if (masterPlayer.getId() == Objects.requireNonNull(GamePlayersMaker.getMasterPlayerFromList(message.getState().getState().getPlayers())).getId())
             gameModel.setGameState(message.getState().getState());
-        createAndPutAck(message);
-    }
-
-    private void announcementHandler(SnakesProto.GameMessage announcementMsg) {
-        SnakesProto.GamePlayer master = GameModel.getMasterPlayer(announcementMsg.getAnnouncement().getPlayers());
-        master = Objects.requireNonNull(master).toBuilder().setIpAddress(senderIp.getHostAddress()).build();
-
-        int masterPort = master.getPort();
-        CommunicationMessage communicationMessage = CommunicationMessage.builder()
-                .message(announcementMsg)
-                .senderPlayer(master)
-                .receiverPlayer(null).build();
-        if (senderIp.equals(myAddress) && myPort == masterPort) {
-            return;
-        }
-
-        for (Map.Entry<CommunicationMessage, Instant> entry : announcements.entrySet()) {
-            if (entry.getKey().getSenderPlayer().getId() == master.getId()) {
-                announcements.remove(entry.getKey());
-                announcements.put(communicationMessage, Instant.now());
-                break;
-            }
-        }
-        announcements.put(communicationMessage, Instant.now());
+        sendAckMessage(message);
     }
 
     private void roleChangeHandler(SnakesProto.GameMessage message) {
@@ -318,71 +332,73 @@ public class NetworkNode extends Subscriber {
             }
             if (message.getRoleChange().getReceiverRole() == SnakesProto.NodeRole.MASTER) {
                 nodeRole = SnakesProto.NodeRole.MASTER;
-                gameModel.rebuiltGameModel(nodeID.hashCode());
+                gameModel.rebuiltGameModel(nodeId.hashCode());
             }
         }
-        createAndPutAck(message);
+        sendAckMessage(message);
     }
 
     private void steerHandler(SnakesProto.GameMessage message) {
         SnakesProto.Direction d = message.getSteer().getDirection();
         gameModel.changeSnakeDirectionById(d, message.getSenderId(), message.getMsgSeq());
-        createAndPutAck(message);
+        sendAckMessage(message);
     }
 
-    private void askHandler(SnakesProto.GameMessage message) {
-        System.out.println("sizebefore = " + messages.size());
-        for (Map.Entry<CommunicationMessage, Instant> entry : messages.entrySet()) {
-            CommunicationMessage m = entry.getKey();
-            if (m.getMessage().getMsgSeq() == message.getMsgSeq() && message.getSenderId() == m.getReceiverPlayer().getId()) {
-                System.out.println("f = " + message.getMsgSeq());
-                System.out.println("delete");
-                messages.remove(m);
+    private void handleAckMessage(SnakesProto.GameMessage message) {
+        for (var timestamp : requiredSendingMessages.entrySet()) {
+            CommunicationMessage messageByTimestamp = timestamp.getKey();
+            if (messageByTimestamp.getMessage().getMsgSeq() == message.getMsgSeq() &&
+                    message.getSenderId() == messageByTimestamp.getReceiverPlayer().getId()) {
+                DebugPrinter.printWithSpecifiedDateAndName(this.getClass().getSimpleName(),
+                        "got ack [" + message.getMsgSeq() + "] " +
+                                "from [" + message.getSenderId() + "]");
+                requiredSendingMessages.remove(messageByTimestamp);
             }
         }
 
-        for (Map.Entry<CommunicationMessage, Instant> entry : toResponse.entrySet()) {
-            CommunicationMessage m = entry.getKey();
-            if (m.getMessage().getMsgSeq() == message.getMsgSeq() && message.getSenderId() == m.getReceiverPlayer().getId()) {
-                System.out.println("deleteRe");
-                messages.remove(m);
+        for (var messageToConfirm : requiredConfirmationMessages.entrySet()) {
+            CommunicationMessage correspondingMessage = messageToConfirm.getKey();
+            if (correspondingMessage.getMessage().getMsgSeq() == message.getMsgSeq() &&
+                    message.getSenderId() == correspondingMessage.getReceiverPlayer().getId()) {
+                DebugPrinter.printWithSpecifiedDateAndName(this.getClass().getSimpleName(),
+                        "got ack for message\n" + correspondingMessage.getMessage());
+                requiredSendingMessages.remove(correspondingMessage);
             }
         }
-        System.out.println("size = " + messages.size());
     }
 
-    private void joinHandler(SnakesProto.GameMessage message) {
-        SnakesProto.GamePlayer newPlayer = GameModel.buildGamePlayer(message.getSenderId(), "", senderPort, senderIp.getHostAddress(), SnakesProto.NodeRole.NORMAL);
-        createAndPutAck(message);
-        if (gameModel.addNewPlayerToModel(newPlayer) == 1) return;
-        if (deputy == null) {
-            deputy = newPlayer;
-            sendChangeRoleMsg(newPlayer, SnakesProto.NodeRole.MASTER, SnakesProto.NodeRole.DEPUTY);
+    private void handleJoinMessage(SnakesProto.GameMessage message) {
+        var newPlayer = this.getPlayerImageByMessage(message);
+        this.sendAckMessage(message);
+        gameModel.addNewPlayerToModel(newPlayer);
+        if (deputyPlayer == null) {
+            deputyPlayer = newPlayer;
+            this.sendRoleChangeMessage(newPlayer, SnakesProto.NodeRole.MASTER, SnakesProto.NodeRole.DEPUTY);
         }
     }
 
-    public void createAndPutAck(SnakesProto.GameMessage message) {
-        SnakesProto.GameMessage.AckMsg ackMsg = SnakesProto.GameMessage.AckMsg.newBuilder().build();
-        SnakesProto.GameMessage mess = SnakesProto.GameMessage.newBuilder()
-                .setAck(ackMsg)
+    public void sendAckMessage(SnakesProto.GameMessage message) {
+        var ackMessageImage = SnakesProto.GameMessage.AckMsg.newBuilder().build();
+        var gameMessage = SnakesProto.GameMessage.newBuilder()
+                .setAck(ackMessageImage)
                 .setMsgSeq(message.getMsgSeq())
-                .setSenderId(nodeID.hashCode())
+                .setSenderId(nodeId.hashCode())
                 .build();
-        CommunicationMessage communicationMessage1 = CommunicationMessage.builder()
-                .message(mess)
-                .senderPlayer(GameModel.buildGamePlayer(nodeID.hashCode(), nodeName, myPort, "", nodeRole))
-                .receiverPlayer(GameModel.buildGamePlayer(message.getSenderId(), "", senderPort, senderIp.getHostAddress(), SnakesProto.NodeRole.NORMAL))
+        CommunicationMessage communicationMessage = CommunicationMessage.builder()
+                .message(gameMessage)
+                .senderPlayer(this.getMyPlayerImage())
+                .receiverPlayer(this.getPlayerImageByMessage(message))
                 .build();
-        messages.put(communicationMessage1, Instant.now());
-
-        System.out.println(messages.size());
+        requiredSendingMessages.put(communicationMessage, Instant.now());
+        DebugPrinter.printWithSpecifiedDateAndName(this.getClass().getSimpleName(),
+                "Required Sending Messages has amount [" + requiredSendingMessages.size() + "]");
     }
 
     public void sendJoinGame(SnakesProto.GamePlayer to, SnakesProto.GameConfig config) {
         nodeRole = SnakesProto.NodeRole.NORMAL;
-        master = to;
+        masterPlayer = to;
         try {
-            gameModel.setSessionMasterId(master.getId());
+            gameModel.setSessionMasterId(masterPlayer.getId());
         } catch (Exception ignored) {
         }
 
@@ -391,51 +407,53 @@ public class NetworkNode extends Subscriber {
                 .setName("placeholder")
                 .build();
         SnakesProto.GameMessage message = SnakesProto.GameMessage.newBuilder()
-                .setMsgSeq(incState())
+                .setMsgSeq(incrementStateNumber())
                 .setJoin(joinMsg)
-                .setSenderId(nodeID.hashCode())
+                .setSenderId(nodeId.hashCode())
                 .setReceiverId(to.getId())
                 .build();
         CommunicationMessage mes = CommunicationMessage.builder()
                 .message(message)
-                .senderPlayer(GameModel.buildGamePlayer(nodeID.hashCode(), nodeName, myPort, "", nodeRole))
+                .senderPlayer(GamePlayersMaker.buildGamePlayerImage(nodeId.hashCode(), nodeName, myPort, "", nodeRole))
                 .receiverPlayer(to).build();
-        synchronized (messages) {
-            messages.put(mes, Instant.now());
-        }
+        requiredSendingMessages.put(mes, Instant.now());
     }
 
     public void sendPingMsg(SnakesProto.GamePlayer to) {
         SnakesProto.GameMessage message = SnakesProto.GameMessage.newBuilder()
-                .setMsgSeq(incState())
+                .setMsgSeq(incrementStateNumber())
                 .setPing(SnakesProto.GameMessage.PingMsg.newBuilder().build())
-                .setSenderId(nodeID.hashCode())
+                .setSenderId(nodeId.hashCode())
                 .setReceiverId(to.getId())
                 .build();
         CommunicationMessage mes = CommunicationMessage.builder()
                 .message(message)
-                .senderPlayer(GameModel.buildGamePlayer(nodeID.hashCode(), nodeName, myPort, "", nodeRole))
+                .senderPlayer(GamePlayersMaker.buildGamePlayerImage(nodeId.hashCode(), nodeName, myPort, "", nodeRole))
                 .receiverPlayer(to).build();
-        messages.put(mes, Instant.now());
+        requiredSendingMessages.put(mes, Instant.now());
     }
 
-    public void sendChangeRoleMsg(SnakesProto.GamePlayer to, SnakesProto.NodeRole srole, SnakesProto.NodeRole rrole) {
-        if (to == null) to = master;
-        SnakesProto.GameMessage.RoleChangeMsg roleChangeMsg = SnakesProto.GameMessage.RoleChangeMsg.newBuilder()
-                .setSenderRole(srole)
-                .setReceiverRole(rrole)
+    public void sendRoleChangeMessage(SnakesProto.GamePlayer receiverPlayer,
+                                      SnakesProto.NodeRole senderPlayerRole,
+                                      SnakesProto.NodeRole receiverPlayerRole) {
+        if (receiverPlayer == null) {
+            receiverPlayer = masterPlayer;
+        }
+        var roleChangeMessage = SnakesProto.GameMessage.RoleChangeMsg.newBuilder()
+                .setSenderRole(senderPlayerRole)
+                .setReceiverRole(receiverPlayerRole)
                 .build();
-        SnakesProto.GameMessage message = SnakesProto.GameMessage.newBuilder()
-                .setMsgSeq(incState())
-                .setRoleChange(roleChangeMsg)
-                .setSenderId(nodeID.hashCode())
-                .setReceiverId(to.getId())
+        var gameMessage = SnakesProto.GameMessage.newBuilder()
+                .setMsgSeq(incrementStateNumber())
+                .setRoleChange(roleChangeMessage)
+                .setSenderId(nodeId.hashCode())
+                .setReceiverId(receiverPlayer.getId())
                 .build();
-        CommunicationMessage mes = CommunicationMessage.builder()
-                .message(message)
-                .senderPlayer(GameModel.buildGamePlayer(nodeID.hashCode(), nodeName, myPort, "", nodeRole))
-                .receiverPlayer(to).build();
-        messages.put(mes, Instant.now());
+        CommunicationMessage communicationMessage = CommunicationMessage.builder()
+                .message(gameMessage)
+                .senderPlayer(this.getMyPlayerImage())
+                .receiverPlayer(receiverPlayer).build();
+        requiredSendingMessages.put(communicationMessage, Instant.now());
     }
 
     public void sendSteerMsg(SnakesProto.Direction d) {
@@ -443,20 +461,47 @@ public class NetworkNode extends Subscriber {
                 .setDirection(d)
                 .build();
         SnakesProto.GameMessage message = SnakesProto.GameMessage.newBuilder()
-                .setMsgSeq(incState())
+                .setMsgSeq(incrementStateNumber())
                 .setSteer(steerMsg)
-                .setSenderId(nodeID.hashCode())
-                .setReceiverId(master.getId())
+                .setSenderId(nodeId.hashCode())
+                .setReceiverId(masterPlayer.getId())
                 .build();
         CommunicationMessage mes = CommunicationMessage.builder()
                 .message(message)
-                .senderPlayer(GameModel.buildGamePlayer(nodeID.hashCode(), nodeName, myPort, "", nodeRole))
+                .senderPlayer(GamePlayersMaker.buildGamePlayerImage(nodeId.hashCode(), nodeName, myPort, "", nodeRole))
                 .receiverPlayer(null).build();
-        messages.put(mes, Instant.now());
+        requiredSendingMessages.put(mes, Instant.now());
     }
 
-    public void inform() {
-        viewController.updateAnn(announcements);
+    private SnakesProto.GamePlayer getMyPlayerImage() {
+        return GamePlayersMaker.buildGamePlayerImage(
+                nodeId.hashCode(),
+                nodeName,
+                myPort,
+                "",
+                nodeRole);
+    }
+
+    private SnakesProto.GamePlayer getPlayerImageByMessage(SnakesProto.GameMessage message) {
+        return GamePlayersMaker.buildGamePlayerImage(
+                message.getSenderId(),
+                message.getJoin().getName(),
+                senderPort,
+                senderInetAddress.getHostAddress(),
+                SnakesProto.NodeRole.NORMAL);
+    }
+
+    public UUID getNodeId() {
+        return nodeId;
+    }
+
+    public static int incrementStateNumber() {
+        DebugPrinter.printWithSpecifiedDateAndName(NetworkNode.class.getSimpleName(), "State number [" + gameStateNumber + "]");
+        return gameStateNumber++;
+    }
+
+    public void update() {
+        viewController.updateAnn(announcementsTimestamps);
     }
 
     public void changeDirection(SnakesProto.Direction d) {
@@ -470,7 +515,20 @@ public class NetworkNode extends Subscriber {
     }
 
     public void changeRole(SnakesProto.NodeRole nodeRole) {
-        master = GameModel.buildGamePlayer(nodeID.hashCode(), nodeName, 0, myAddress.getHostAddress(), SnakesProto.NodeRole.MASTER);
+        masterPlayer = GamePlayersMaker.buildGamePlayerImage(nodeId.hashCode(), nodeName, 0, myInetAddress.getHostAddress(), SnakesProto.NodeRole.MASTER);
         this.nodeRole = nodeRole;
     }
+
+    public ConcurrentHashMap<CommunicationMessage, Instant> getRequiredSendingMessages() {
+        return requiredSendingMessages;
+    }
+
+    public String getNodeName() {
+        return nodeName;
+    }
+
+    public int getMyPort() {
+        return myPort;
+    }
+
 }

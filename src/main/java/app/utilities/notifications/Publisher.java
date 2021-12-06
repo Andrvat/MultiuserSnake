@@ -7,8 +7,8 @@ public abstract class Publisher {
     List<Subscriber> subscribers = new ArrayList<>();
 
     public void informAllSubscribers() {
-        for (Subscriber subscriber : subscribers) {
-            subscriber.inform();
+        for (var subscriber : subscribers) {
+            subscriber.update();
         }
     }
 

@@ -3,6 +3,7 @@ package app.view;
 import app.model.GameModel;
 import app.controller.GameController;
 import app.networks.CommunicationMessage;
+import app.utilities.GamePlayersMaker;
 import proto.SnakesProto;
 
 import javax.swing.*;
@@ -61,7 +62,7 @@ public class MainMenu extends JPanel {
             button1.addActionListener((e)-> gameController.exit());
             button.addActionListener((e)-> gameController.join(entry.getKey().getSenderPlayer(),
                     entry.getKey().getMessage().getAnnouncement().getConfig()));
-            JLabel label = new JLabel(Objects.requireNonNull(GameModel.getMasterPlayer(entry.getKey().getMessage().getAnnouncement().getPlayers())).getName()
+            JLabel label = new JLabel(Objects.requireNonNull(GamePlayersMaker.getMasterPlayerFromList(entry.getKey().getMessage().getAnnouncement().getPlayers())).getName()
                     + "    [" +entry.getKey().getSenderPlayer().getIpAddress() +"]    "
                     +entry.getKey().getMessage().getAnnouncement().getPlayers().getPlayersCount()
                     +"     "+ entry.getKey().getMessage().getAnnouncement().getConfig().getWidth() +"x"+entry.getKey().getMessage().getAnnouncement().getConfig().getHeight()

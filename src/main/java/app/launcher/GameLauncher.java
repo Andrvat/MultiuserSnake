@@ -14,13 +14,16 @@ public class GameLauncher {
         try {
             cmdArgsParser.parseArguments(args);
             GameModel gameModel = new GameModel();
-            NetworkNode networkNode = new NetworkNode(gameModel, SnakesProto.NodeRole.NORMAL,
-                    cmdArgsParser.getPlayerName(),
-                    InetAddress.getByName(cmdArgsParser.getHostInetAddress()),
-                    cmdArgsParser.getHostPort(), UUID.randomUUID());
-            networkNode.start();
+            NetworkNode networkNode = NetworkNode.builder()
+                    .nodeId(UUID.randomUUID())
+                    .nodeName(cmdArgsParser.getPlayerName())
+                    .nodeRole(SnakesProto.NodeRole.NORMAL)
+                    .myPort(cmdArgsParser.getHostPort())
+                    .gameModel(gameModel)
+                    .myInetAddress(InetAddress.getByName(cmdArgsParser.getHostInetAddress()))
+                    .build();
+            networkNode.startCommunicating();
         } catch (Exception exception) {
-            System.err.println(cmdArgsParser);
             exception.printStackTrace();
         }
     }

@@ -5,45 +5,34 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.SocketTimeoutException;
 
-import app.networks.NetworkNode;
+import app.utilities.DebugPrinter;
+import lombok.Builder;
 import proto.SnakesProto;
 
+@Builder
 public class UnicastReceiver extends Thread {
-    DatagramSocket socket;
-    NetworkNode networkNode;
-
-    public UnicastReceiver(DatagramSocket socket, NetworkNode networkNode) {
-        this.socket = socket;
-        this.networkNode = networkNode;
-    }
-
-    private void receiveGameMessage() throws IOException {
-        byte[] receivedDataBuffer = new byte[10000];
-        byte[] tmpBuffer;
-        SnakesProto.GameMessage gameMessage;
-        DatagramPacket packet = new DatagramPacket(receivedDataBuffer, receivedDataBuffer.length);
-        while (true) {
-            try {
-                socket.receive(packet);
-
-                tmpBuffer = new byte[packet.getLength()];
-                if (packet.getLength() >= 0) System.arraycopy(packet.getData(), 0, tmpBuffer, 0, packet.getLength());
-
-                gameMessage = SnakesProto.GameMessage.parseFrom(tmpBuffer);
-                System.out.println(gameMessage.getTypeCase());
-
-                synchronized (networkNode.messages) {
-                    networkNode.receiveUnicast(gameMessage, packet.getAddress(), packet.getPort());
-                }
-            } catch (SocketTimeoutException ignored) {
-            }
-        }
-    }
+    private static final int RECEIVE_BUFFER_SIZE = 10000;
+    private final DatagramSocket datagramSocket;
+    private final NetworkNode networkNode;
 
     @Override
     public void run() {
         try {
-            receiveGameMessage();
+            byte[] receivedDataBuffer = new byte[RECEIVE_BUFFER_SIZE];
+            DatagramPacket receivedPacket = new DatagramPacket(receivedDataBuffer, receivedDataBuffer.length);
+            byte[] messageBytes;
+            SnakesProto.GameMessage gameMessage;
+            while (true) {
+                try {
+                    datagramSocket.receive(receivedPacket);
+                    messageBytes = new byte[receivedPacket.getLength()];
+                    System.arraycopy(receivedPacket.getData(), 0, messageBytes, 0, receivedPacket.getLength());
+                    gameMessage = SnakesProto.GameMessage.parseFrom(messageBytes);
+                    networkNode.handleReceivedUnicastMessage(gameMessage, receivedPacket.getAddress(), receivedPacket.getPort());
+                    DebugPrinter.printWithSpecifiedDateAndName(this.getClass().getSimpleName(), gameMessage.getTypeCase().toString());
+                } catch (SocketTimeoutException ignored) {
+                }
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }
