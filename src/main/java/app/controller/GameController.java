@@ -13,21 +13,21 @@ public class GameController {
         this.networkNode = networkNode;
     }
 
-    public void newGame() {
-        SnakesProto.GameConfig gameConfig = SnakesProto.GameConfig.newBuilder()
-                .setWidth(40)
-                .setHeight(30)
-                .setFoodStatic(50)
-                .setFoodPerPlayer((float) 0.2)
-                .setStateDelayMs(500)
-                .setDeadFoodProb((float) 0.8)
-                .setPingDelayMs(100)
-                .setNodeTimeoutMs(9000)
-                .build();
-        gameModel.launchNewGameAsMaster(gameConfig, networkNode.getNodeName(), networkNode.getNodeId().hashCode(), networkNode.getMyPort());
-        networkNode.changeRole(SnakesProto.NodeRole.MASTER);
-        System.out.println("NEW GAME!");
-    }
+//    public void newGame() {
+//        SnakesProto.GameConfig gameConfig = SnakesProto.GameConfig.newBuilder()
+//                .setWidth(40)
+//                .setHeight(30)
+//                .setFoodStatic(50)
+//                .setFoodPerPlayer((float) 0.2)
+//                .setStateDelayMs(500)
+//                .setDeadFoodProb((float) 0.8)
+//                .setPingDelayMs(100)
+//                .setNodeTimeoutMs(9000)
+//                .build();
+//        gameModel.launchNewGameAsMaster(gameConfig, networkNode.getNodeName(), networkNode.getNodeId().hashCode(), networkNode.getMyPort());
+//        networkNode.setNewMasterPlayer(SnakesProto.NodeRole.MASTER);
+//        System.out.println("NEW GAME!");
+//    }
 
     public void newGame(int w, int h, int fs, float fp, int delay) {
         SnakesProto.GameConfig gameConfig = SnakesProto.GameConfig.newBuilder()
@@ -41,20 +41,20 @@ public class GameController {
                 .setNodeTimeoutMs(9000)
                 .build();
         gameModel.launchNewGameAsMaster(gameConfig, networkNode.getNodeName(), networkNode.getNodeId().hashCode(), networkNode.getMyPort());
-        networkNode.changeRole(SnakesProto.NodeRole.MASTER);
+        networkNode.setNewDefaultMasterPlayer();
         System.out.println("NEW GAME!");
     }
 
     public void changeDirection(SnakesProto.Direction direction) {
-        networkNode.changeDirection(direction);
+        networkNode.sendChangeSnakeDirection(direction);
     }
 
     public void nModelSub() {
         gameModel.informAllSubscribers();
     }
 
-    public void join(SnakesProto.GamePlayer player, SnakesProto.GameConfig config) {
-        networkNode.sendJoinGame(player, config);
+    public void join(SnakesProto.GamePlayer player) {
+        networkNode.sendJoinGameMessage(player);
     }
 
     public void exit() {

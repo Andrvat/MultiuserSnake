@@ -20,8 +20,8 @@ public class MulticastReceiver extends Thread {
         try {
             byte[] receivedDataBuffer = new byte[RECEIVE_BUFFER_SIZE];
             DatagramPacket receivedPacket = new DatagramPacket(receivedDataBuffer, receivedDataBuffer.length);
-            byte[] messageBytes;
             SnakesProto.GameMessage gameMessage;
+            byte[] messageBytes;
             while (true) {
                 try {
                     multicastSocket.receive(receivedPacket);

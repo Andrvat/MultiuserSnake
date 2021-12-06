@@ -113,13 +113,12 @@ public class GameModel extends Publisher {
 
     public void setGameState(SnakesProto.GameState gameState) {
         this.gameState = gameState;
-        for (SnakesProto.GameState.Snake snake : gameState.getSnakesList()) {
+        for (var snake : gameState.getSnakesList()) {
             snakesAllCoordinatesByPlayer.put(snake.getPlayerId(), getSnakeAllCoordinates(snake));
         }
         informAllSubscribers();
     }
 
-    // TODO: магические константы (проверить на соответствие return значений)
     public void addNewPlayerToModel(SnakesProto.GamePlayer newPlayer) {
         boolean isPlayerUnknown = true;
         for (SnakesProto.GamePlayer existingPlayer : gameState.getPlayers().getPlayersList()) {

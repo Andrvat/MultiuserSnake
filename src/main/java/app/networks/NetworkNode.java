@@ -3,7 +3,6 @@ package app.networks;
 import java.io.IOException;
 import java.net.*;
 import java.time.Instant;
-import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -19,7 +18,8 @@ import proto.SnakesProto;
 public class NetworkNode extends Subscriber {
     private static final String MULTICAST_IP = "239.192.0.4";
     private static final int MULTICAST_PORT = 9192;
-    private static final int TIMEOUT = 3000;
+    private static final int SOCKETS_TIMEOUT_IN_MILLIS = 3000;
+    private static final int ANNOUNCEMENT_MESSAGE_PERIOD_IN_MILLIS = 3000;
 
     private final String nodeName;
     private SnakesProto.NodeRole nodeRole;
@@ -46,6 +46,11 @@ public class NetworkNode extends Subscriber {
     private long lastAnnouncementTimestamp;
     private long lastStateTimestamp;
     private long lastSentMessageTimestamp;
+
+    private static final SnakesProto.NodeRole VIEWER_ROLE = SnakesProto.NodeRole.VIEWER;
+    private static final SnakesProto.NodeRole MASTER_ROLE = SnakesProto.NodeRole.MASTER;
+    private static final SnakesProto.NodeRole DEPUTY_ROLE = SnakesProto.NodeRole.DEPUTY;
+    private static final SnakesProto.NodeRole NORMAL_ROLE = SnakesProto.NodeRole.NORMAL;
 
     private final ConcurrentHashMap<CommunicationMessage, Instant> announcementsTimestamps = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<CommunicationMessage, Instant> requiredSendingMessages = new ConcurrentHashMap<>();
@@ -75,8 +80,8 @@ public class NetworkNode extends Subscriber {
     }
 
     private void setTimeoutsForSockets() throws SocketException {
-        multicastSocket.setSoTimeout(TIMEOUT);
-        datagramSocket.setSoTimeout(TIMEOUT);
+        multicastSocket.setSoTimeout(SOCKETS_TIMEOUT_IN_MILLIS);
+        datagramSocket.setSoTimeout(SOCKETS_TIMEOUT_IN_MILLIS);
     }
 
     public void startCommunicating() {
@@ -97,7 +102,7 @@ public class NetworkNode extends Subscriber {
         multicastReceiver.start();
 
         while (true) {
-            sendMessages();
+            communicate();
         }
     }
 
@@ -105,162 +110,186 @@ public class NetworkNode extends Subscriber {
         return Instant.now().toEpochMilli();
     }
 
-    private boolean isTimeTo(long time, int period) {
-        return Instant.now().toEpochMilli() - time > period;
-    }
-
-    private void sendMessages() {
-        sendMail();
-
-        sendResponses();
-        if (isTimeTo(lastAnnouncementTimestamp, 3000)) {
-            if (nodeRole == SnakesProto.NodeRole.MASTER) {
-                sendAnnouncements();
+    private void communicate() {
+        processGameStep();
+        sendAllRemainingMessages();
+        if (moreTimeHasPassedThanPeriod(lastAnnouncementTimestamp, ANNOUNCEMENT_MESSAGE_PERIOD_IN_MILLIS)) {
+            if (nodeRole.equals(MASTER_ROLE)) {
+                sendAnnouncementsToMulticastGroup();
                 lastAnnouncementTimestamp = Instant.now().toEpochMilli();
             }
         }
     }
 
-    private void sendResponses() {
-        if (isTimeTo(lastSentMessageTimestamp, gameModel.getGameState().getConfig().getPingDelayMs())) {
-            checkPlayerActivity();
-            lastSentMessageTimestamp = Instant.now().toEpochMilli();
-            System.gc();
-        } else return;
-
-        for (Map.Entry<CommunicationMessage, Instant> entry : requiredSendingMessages.entrySet()) {
+    private void processGameStep() {
+        boolean hasTimePassed = makeNextStepIfTimePassed();
+        for (var requiredSendingMessage : requiredSendingMessages.entrySet()) {
             try {
-                CommunicationMessage m = entry.getKey();
-                if (m.getReceiverPlayer() == null) {
+                CommunicationMessage correspondingMessage = requiredSendingMessage.getKey();
+                if (correspondingMessage.getReceiverPlayer() == null) {
                     if (masterPlayer != null)
-                        m.setReceiverPlayer(masterPlayer);
+                        correspondingMessage.setReceiverPlayer(masterPlayer);
                     else {
-                        requiredSendingMessages.remove(m);
+                        requiredSendingMessages.remove(correspondingMessage);
                         continue;
                     }
                 }
-
-                m.setMessage(m.getMessage().toBuilder().
-                        setState(SnakesProto.GameMessage.StateMsg.newBuilder().setState(gameModel.getGameState())).build());
-
-                sendingDatagramPacket =
-                        new DatagramPacket(m.getMessage().toByteArray(),
-                                m.getMessage().toByteArray().length,
-                                InetAddress.getByName(m.getReceiverPlayer().getIpAddress()),
-                                m.getReceiverPlayer().getPort());
-                datagramSocket.send(sendingDatagramPacket);
-
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
-    }
-
-    private void sendMail() {
-        boolean isTime = false;
-        int time = gameModel.getGameState().getConfig().getStateDelayMs();
-        if (isTimeTo(lastStateTimestamp, time) && nodeRole == SnakesProto.NodeRole.MASTER) {
-            gameModel.makeGameNextStep();
-            deputyPlayer = GamePlayersMaker.getDeputyPlayerFromList(gameModel.getGameState().getPlayers());
-            for (SnakesProto.GamePlayer player : gameModel.getGameState().getPlayers().getPlayersList()) {
-                if (nodeId.hashCode() != player.getId()) {
-                    requiredSendingMessages.put(CommunicationMessage.builder()
-                            .message(null)
-                            .senderPlayer(masterPlayer)
-                            .receiverPlayer(player).build(), Instant.now());
-                }
-            }
-            isTime = true;
-            lastStateTimestamp = Instant.now().toEpochMilli();
-        }
-
-        for (Map.Entry<CommunicationMessage, Instant> entry : requiredSendingMessages.entrySet()) {
-            try {
-                CommunicationMessage m = entry.getKey();
-                if (m.getReceiverPlayer() == null) {
-                    if (masterPlayer != null)
-                        m.setReceiverPlayer(masterPlayer);
-                    else {
-                        requiredSendingMessages.remove(m);
-                        continue;
-                    }
-                }
-
-                if (m.getMessage() == null) {
-                    m.setMessage(SnakesProto.GameMessage.newBuilder()
+                if (correspondingMessage.getMessage() == null) {
+                    correspondingMessage.setMessage(SnakesProto.GameMessage.newBuilder()
                             .setMsgSeq(incrementStateNumber())
                             .setSenderId(nodeId.hashCode())
-                            .setState(SnakesProto.GameMessage.StateMsg.newBuilder().setState(gameModel.getGameState()).build())
+                            .setState(SnakesProto.GameMessage.StateMsg.newBuilder()
+                                    .setState(gameModel.getGameState()).build())
                             .build());
                 }
-
+                var messageBytes = correspondingMessage.getMessage().toByteArray();
                 sendingDatagramPacket = new DatagramPacket(
-                        m.getMessage().toByteArray(), m.getMessage().toByteArray().length, InetAddress.getByName(m.getReceiverPlayer().getIpAddress()), m.getReceiverPlayer().getPort());
-
-                if (m.getMessage().getTypeCase() == SnakesProto.GameMessage.TypeCase.STATE) {
-
-                    if (isTime) {
-                        datagramSocket.send(sendingDatagramPacket);
-                    }
+                        messageBytes,
+                        messageBytes.length,
+                        InetAddress.getByName(correspondingMessage.getReceiverPlayer().getIpAddress()),
+                        correspondingMessage.getReceiverPlayer().getPort());
+                if (correspondingMessage.getMessage().getTypeCase()
+                        .equals(SnakesProto.GameMessage.TypeCase.STATE) && hasTimePassed) {
+                    datagramSocket.send(sendingDatagramPacket);
                 } else {
                     datagramSocket.send(sendingDatagramPacket);
-                    if (m.getMessage().getTypeCase() != SnakesProto.GameMessage.TypeCase.ACK) {
-                        requiredConfirmationMessages.put(m, Instant.now());
+                    if (!correspondingMessage.getMessage().getTypeCase().equals(SnakesProto.GameMessage.TypeCase.ACK)) {
+                        requiredConfirmationMessages.put(correspondingMessage, Instant.now());
                     }
-                    requiredSendingMessages.remove(m);
+                    requiredSendingMessages.remove(correspondingMessage);
                 }
-
-            } catch (Exception e) {
-                e.printStackTrace();
+            } catch (Exception exception) {
+                exception.printStackTrace();
             }
         }
-        if (isTime) {
+        if (hasTimePassed) {
             System.gc();
         }
     }
 
-    private void checkPlayerActivity() {
-        for (Map.Entry<Integer, Instant> entry : gameModel.getActivitiesTimestampsByPlayer().entrySet()) {
-            if (Instant.now().toEpochMilli() - entry.getValue().toEpochMilli() > gameModel.getGameState().getConfig().getNodeTimeoutMs()) {
-
-                if (gameModel.getPlayerById(entry.getKey()).getRole() == SnakesProto.NodeRole.MASTER) {
-                    if (nodeRole == SnakesProto.NodeRole.DEPUTY) {
-                        gameModel.rebuiltGameModel(nodeId.hashCode());
-                        nodeRole = SnakesProto.NodeRole.MASTER;
-                        for (SnakesProto.GamePlayer player : gameModel.getGameState().getPlayers().getPlayersList()) {
-                            sendRoleChangeMessage(player, SnakesProto.NodeRole.MASTER, SnakesProto.NodeRole.NORMAL);
-                        }
+    private void sendAllRemainingMessages() {
+        if (!moreTimeHasPassedThanPeriod(lastSentMessageTimestamp,
+                gameModel.getGameState().getConfig().getPingDelayMs())) {
+            return;
+        }
+        processPlayersActivitiesByPings();
+        for (var requiredSendingMessage : requiredSendingMessages.entrySet()) {
+            try {
+                CommunicationMessage correspondingMessage = requiredSendingMessage.getKey();
+                if (correspondingMessage.getReceiverPlayer() == null) {
+                    if (masterPlayer != null) {
+                        correspondingMessage.setReceiverPlayer(masterPlayer);
+                    } else {
+                        requiredSendingMessages.remove(correspondingMessage);
+                        continue;
                     }
-                    if (nodeRole == SnakesProto.NodeRole.NORMAL) {
+                }
+                var currentStateMessage = SnakesProto.GameMessage.StateMsg.newBuilder()
+                        .setState(gameModel.getGameState());
+                var updatedByCurrentStateMessage = correspondingMessage.getMessage().toBuilder()
+                        .setState(currentStateMessage).build();
+                correspondingMessage.setMessage(updatedByCurrentStateMessage);
+
+                var messageBytes = correspondingMessage.getMessage().toByteArray();
+                sendingDatagramPacket = new DatagramPacket(
+                        messageBytes,
+                        messageBytes.length,
+                        InetAddress.getByName(correspondingMessage.getReceiverPlayer().getIpAddress()),
+                        correspondingMessage.getReceiverPlayer().getPort());
+                datagramSocket.send(sendingDatagramPacket);
+            } catch (Exception exception) {
+                exception.printStackTrace();
+            }
+        }
+    }
+
+    private void processPlayersActivitiesByPings() {
+        for (var activityTimestamp : gameModel.getActivitiesTimestampsByPlayer().entrySet()) {
+            if (Instant.now().toEpochMilli() - activityTimestamp.getValue().toEpochMilli() >
+                    gameModel.getGameState().getConfig().getNodeTimeoutMs()) {
+                if (gameModel.getPlayerById(activityTimestamp.getKey()).getRole().equals(MASTER_ROLE)) {
+                    if (nodeRole.equals(DEPUTY_ROLE)) {
+                        nodeRole = MASTER_ROLE;
+                        gameModel.rebuiltGameModel(nodeId.hashCode());
+                        for (var player : gameModel.getGameState().getPlayers().getPlayersList()) {
+                            this.sendRoleChangeMessage(player, MASTER_ROLE, NORMAL_ROLE);
+                        }
+                    } else if (nodeRole.equals(NORMAL_ROLE)) {
                         masterPlayer = GamePlayersMaker.getDeputyPlayerFromList(gameModel.getGameState().getPlayers());
                     }
                 }
-                sendPingMsg(gameModel.getPlayerById(entry.getKey()));
+                this.sendPingMessage(gameModel.getPlayerById(activityTimestamp.getKey()));
             }
         }
+        lastSentMessageTimestamp = Instant.now().toEpochMilli();
+        System.gc();
     }
 
-    private void sendAnnouncements() {
-        byte[] data;
-        SnakesProto.GameMessage.AnnouncementMsg announcementMsg = SnakesProto.GameMessage.AnnouncementMsg.newBuilder()
+    private boolean makeNextStepIfTimePassed() {
+        boolean hasTimePassed = false;
+        int stateDelay = gameModel.getGameState().getConfig().getStateDelayMs();
+        if (moreTimeHasPassedThanPeriod(lastStateTimestamp, stateDelay) && nodeRole.equals(MASTER_ROLE)) {
+            gameModel.makeGameNextStep();
+            deputyPlayer = GamePlayersMaker.getDeputyPlayerFromList(gameModel.getGameState().getPlayers());
+            for (var player : gameModel.getGameState().getPlayers().getPlayersList()) {
+                if (nodeId.hashCode() != player.getId()) {
+                    requiredSendingMessages.put(
+                            CommunicationMessage.builder()
+                                    .message(null)
+                                    .senderPlayer(masterPlayer)
+                                    .receiverPlayer(player)
+                                    .build(),
+                            Instant.now());
+                }
+            }
+            hasTimePassed = true;
+            lastStateTimestamp = getEpochMillisBySystemClockInstant();
+        }
+        return hasTimePassed;
+    }
+
+    private boolean moreTimeHasPassedThanPeriod(long timeLabel, long period) {
+        return Instant.now().toEpochMilli() - timeLabel > period;
+    }
+
+    private void sendAnnouncementsToMulticastGroup() {
+        var announcementMessage = SnakesProto.GameMessage.AnnouncementMsg.newBuilder()
                 .setCanJoin(true)
                 .setPlayers(gameModel.getSessionGamePlayers())
                 .setConfig(gameModel.getGameConfig())
                 .build();
-        SnakesProto.GameMessage mess = SnakesProto.GameMessage.newBuilder()
-                .setMsgSeq(0)
-                .setSenderId(0)
-                .setReceiverId(0)
-                .setAnnouncement(announcementMsg)
+        int unusedInformation = 0;
+        var gameMessage = SnakesProto.GameMessage.newBuilder()
+                .setMsgSeq(unusedInformation)
+                .setSenderId(unusedInformation)
+                .setReceiverId(unusedInformation)
+                .setAnnouncement(announcementMessage)
                 .build();
-
         try {
-            data = mess.toByteArray();
-            sendingDatagramPacket = new DatagramPacket(data, data.length, InetAddress.getByName(MULTICAST_IP), MULTICAST_PORT);
+            var messageBytes = gameMessage.toByteArray();
+            sendingDatagramPacket = new DatagramPacket(messageBytes,
+                    messageBytes.length,
+                    InetAddress.getByName(MULTICAST_IP),
+                    MULTICAST_PORT);
             multicastSocket.send(sendingDatagramPacket);
-        } catch (Exception e) {
-            e.printStackTrace();
+        } catch (Exception exception) {
+            exception.printStackTrace();
         }
+    }
+
+    private void sendPingMessage(SnakesProto.GamePlayer receiverPlayer) {
+        var gameMessage = SnakesProto.GameMessage.newBuilder()
+                .setMsgSeq(incrementStateNumber())
+                .setPing(SnakesProto.GameMessage.PingMsg.newBuilder().build())
+                .setSenderId(nodeId.hashCode())
+                .setReceiverId(receiverPlayer.getId())
+                .build();
+        CommunicationMessage communicationMessage = CommunicationMessage.builder()
+                .message(gameMessage)
+                .senderPlayer(this.getMyPlayerImage())
+                .receiverPlayer(receiverPlayer)
+                .build();
+        requiredSendingMessages.put(communicationMessage, Instant.now());
     }
 
     public void handleReceivedUnicastMessage(SnakesProto.GameMessage message, InetAddress senderInetAddress, int senderPort) {
@@ -270,10 +299,10 @@ public class NetworkNode extends Subscriber {
             switch (message.getTypeCase()) {
                 case ACK -> handleAckMessage(message);
                 case JOIN -> handleJoinMessage(message);
-                case STEER -> steerHandler(message);
-                case STATE -> stateHandler(message);
-                case ROLE_CHANGE -> roleChangeHandler(message);
-                default -> sendAckMessage(message);
+                case STEER -> handleSteerMessage(message);
+                case STATE -> handleStateMessage(message);
+                case ROLE_CHANGE -> handleRoleChangeMessage(message);
+                default -> sendAckMessageTo(message);
             }
             gameModel.makePlayerTimestamp(message.getSenderId());
         }
@@ -284,7 +313,7 @@ public class NetworkNode extends Subscriber {
         this.senderPort = senderPort;
         if (message != null) {
             var announcementMessageIndicator = SnakesProto.GameMessage.TypeCase.ANNOUNCEMENT;
-            if (message.getTypeCase() == SnakesProto.GameMessage.TypeCase.ANNOUNCEMENT) {
+            if (message.getTypeCase().equals(announcementMessageIndicator)) {
                 handleAnnouncementMessage(message);
             }
             gameModel.makePlayerTimestamp(message.getSenderId());
@@ -314,34 +343,40 @@ public class NetworkNode extends Subscriber {
         }
     }
 
-    private void stateHandler(SnakesProto.GameMessage message) {
-        if (masterPlayer.getId() == Objects.requireNonNull(GamePlayersMaker.getMasterPlayerFromList(message.getState().getState().getPlayers())).getId())
-            gameModel.setGameState(message.getState().getState());
-        sendAckMessage(message);
+    private void handleStateMessage(SnakesProto.GameMessage stateMessage) {
+        var actualPlayersList = stateMessage.getState().getState().getPlayers();
+        var actualMasterPlayerId = GamePlayersMaker.getMasterPlayerFromList(actualPlayersList);
+        if (masterPlayer.getId() == Objects.requireNonNull(actualMasterPlayerId).getId()) {
+            gameModel.setGameState(stateMessage.getState().getState());
+        }
+        this.sendAckMessageTo(stateMessage);
     }
 
-    private void roleChangeHandler(SnakesProto.GameMessage message) {
-        if (message.getRoleChange().hasSenderRole()) {
-            if (message.getRoleChange().getSenderRole() == SnakesProto.NodeRole.VIEWER) {
-                gameModel.changePlayerGameStatus(message.getSenderId(), message.getRoleChange().getSenderRole(), SnakesProto.GameState.Snake.SnakeState.ZOMBIE);
+    private void handleRoleChangeMessage(SnakesProto.GameMessage changeRoleMessage) {
+        var zombieSnakeIndicator = SnakesProto.GameState.Snake.SnakeState.ZOMBIE;
+        if (changeRoleMessage.getRoleChange().hasSenderRole()) {
+            if (changeRoleMessage.getRoleChange().getSenderRole().equals(VIEWER_ROLE)) {
+                gameModel.changePlayerGameStatus(changeRoleMessage.getSenderId(),
+                        changeRoleMessage.getRoleChange().getSenderRole(),
+                        zombieSnakeIndicator);
             }
         }
-        if (message.getRoleChange().hasReceiverRole()) {
-            if (message.getRoleChange().getReceiverRole() == SnakesProto.NodeRole.DEPUTY) {
-                nodeRole = SnakesProto.NodeRole.DEPUTY;
+        if (changeRoleMessage.getRoleChange().hasReceiverRole()) {
+            if (changeRoleMessage.getRoleChange().getReceiverRole().equals(DEPUTY_ROLE)) {
+                nodeRole = DEPUTY_ROLE;
             }
-            if (message.getRoleChange().getReceiverRole() == SnakesProto.NodeRole.MASTER) {
-                nodeRole = SnakesProto.NodeRole.MASTER;
+            if (changeRoleMessage.getRoleChange().getReceiverRole().equals(MASTER_ROLE)) {
+                nodeRole = MASTER_ROLE;
                 gameModel.rebuiltGameModel(nodeId.hashCode());
             }
         }
-        sendAckMessage(message);
+        this.sendAckMessageTo(changeRoleMessage);
     }
 
-    private void steerHandler(SnakesProto.GameMessage message) {
-        SnakesProto.Direction d = message.getSteer().getDirection();
-        gameModel.changeSnakeDirectionById(d, message.getSenderId(), message.getMsgSeq());
-        sendAckMessage(message);
+    private void handleSteerMessage(SnakesProto.GameMessage steerMessage) {
+        var chosenDirection = steerMessage.getSteer().getDirection();
+        gameModel.changeSnakeDirectionById(chosenDirection, steerMessage.getSenderId(), steerMessage.getMsgSeq());
+        this.sendAckMessageTo(steerMessage);
     }
 
     private void handleAckMessage(SnakesProto.GameMessage message) {
@@ -361,7 +396,7 @@ public class NetworkNode extends Subscriber {
             if (correspondingMessage.getMessage().getMsgSeq() == message.getMsgSeq() &&
                     message.getSenderId() == correspondingMessage.getReceiverPlayer().getId()) {
                 DebugPrinter.printWithSpecifiedDateAndName(this.getClass().getSimpleName(),
-                        "got ack for message\n" + correspondingMessage.getMessage());
+                        "got ack for message\n{\n" + correspondingMessage.getMessage() + "}\n");
                 requiredSendingMessages.remove(correspondingMessage);
             }
         }
@@ -369,15 +404,15 @@ public class NetworkNode extends Subscriber {
 
     private void handleJoinMessage(SnakesProto.GameMessage message) {
         var newPlayer = this.getPlayerImageByMessage(message);
-        this.sendAckMessage(message);
+        this.sendAckMessageTo(message);
         gameModel.addNewPlayerToModel(newPlayer);
         if (deputyPlayer == null) {
             deputyPlayer = newPlayer;
-            this.sendRoleChangeMessage(newPlayer, SnakesProto.NodeRole.MASTER, SnakesProto.NodeRole.DEPUTY);
+            this.sendRoleChangeMessage(newPlayer, MASTER_ROLE, DEPUTY_ROLE);
         }
     }
 
-    public void sendAckMessage(SnakesProto.GameMessage message) {
+    public void sendAckMessageTo(SnakesProto.GameMessage message) {
         var ackMessageImage = SnakesProto.GameMessage.AckMsg.newBuilder().build();
         var gameMessage = SnakesProto.GameMessage.newBuilder()
                 .setAck(ackMessageImage)
@@ -394,43 +429,34 @@ public class NetworkNode extends Subscriber {
                 "Required Sending Messages has amount [" + requiredSendingMessages.size() + "]");
     }
 
-    public void sendJoinGame(SnakesProto.GamePlayer to, SnakesProto.GameConfig config) {
-        nodeRole = SnakesProto.NodeRole.NORMAL;
-        masterPlayer = to;
-        try {
-            gameModel.setSessionMasterId(masterPlayer.getId());
-        } catch (Exception ignored) {
-        }
-
-        SnakesProto.GameMessage.JoinMsg joinMsg = SnakesProto.GameMessage.JoinMsg.newBuilder()
-                .setOnlyView(false)
-                .setName("placeholder")
-                .build();
-        SnakesProto.GameMessage message = SnakesProto.GameMessage.newBuilder()
-                .setMsgSeq(incrementStateNumber())
-                .setJoin(joinMsg)
-                .setSenderId(nodeId.hashCode())
-                .setReceiverId(to.getId())
-                .build();
-        CommunicationMessage mes = CommunicationMessage.builder()
-                .message(message)
-                .senderPlayer(GamePlayersMaker.buildGamePlayerImage(nodeId.hashCode(), nodeName, myPort, "", nodeRole))
-                .receiverPlayer(to).build();
-        requiredSendingMessages.put(mes, Instant.now());
+    private SnakesProto.GamePlayer getPlayerImageByMessage(SnakesProto.GameMessage message) {
+        return GamePlayersMaker.buildGamePlayerImage(
+                message.getSenderId(),
+                message.getJoin().getName(),
+                senderPort,
+                senderInetAddress.getHostAddress(),
+                NORMAL_ROLE);
     }
 
-    public void sendPingMsg(SnakesProto.GamePlayer to) {
-        SnakesProto.GameMessage message = SnakesProto.GameMessage.newBuilder()
-                .setMsgSeq(incrementStateNumber())
-                .setPing(SnakesProto.GameMessage.PingMsg.newBuilder().build())
-                .setSenderId(nodeId.hashCode())
-                .setReceiverId(to.getId())
+    public void sendJoinGameMessage(SnakesProto.GamePlayer receiverPlayer) {
+        nodeRole = NORMAL_ROLE;
+        masterPlayer = receiverPlayer;
+        gameModel.setSessionMasterId(masterPlayer.getId());
+        var joinMessage = SnakesProto.GameMessage.JoinMsg.newBuilder()
+                .setOnlyView(false)
+                .setName(this.nodeName)
                 .build();
-        CommunicationMessage mes = CommunicationMessage.builder()
-                .message(message)
-                .senderPlayer(GamePlayersMaker.buildGamePlayerImage(nodeId.hashCode(), nodeName, myPort, "", nodeRole))
-                .receiverPlayer(to).build();
-        requiredSendingMessages.put(mes, Instant.now());
+        var gameMessage = SnakesProto.GameMessage.newBuilder()
+                .setMsgSeq(incrementStateNumber())
+                .setJoin(joinMessage)
+                .setSenderId(nodeId.hashCode())
+                .setReceiverId(receiverPlayer.getId())
+                .build();
+        CommunicationMessage communicationMessage = CommunicationMessage.builder()
+                .message(gameMessage)
+                .senderPlayer(this.getMyPlayerImage())
+                .receiverPlayer(receiverPlayer).build();
+        requiredSendingMessages.put(communicationMessage, Instant.now());
     }
 
     public void sendRoleChangeMessage(SnakesProto.GamePlayer receiverPlayer,
@@ -456,23 +482,6 @@ public class NetworkNode extends Subscriber {
         requiredSendingMessages.put(communicationMessage, Instant.now());
     }
 
-    public void sendSteerMsg(SnakesProto.Direction d) {
-        SnakesProto.GameMessage.SteerMsg steerMsg = SnakesProto.GameMessage.SteerMsg.newBuilder()
-                .setDirection(d)
-                .build();
-        SnakesProto.GameMessage message = SnakesProto.GameMessage.newBuilder()
-                .setMsgSeq(incrementStateNumber())
-                .setSteer(steerMsg)
-                .setSenderId(nodeId.hashCode())
-                .setReceiverId(masterPlayer.getId())
-                .build();
-        CommunicationMessage mes = CommunicationMessage.builder()
-                .message(message)
-                .senderPlayer(GamePlayersMaker.buildGamePlayerImage(nodeId.hashCode(), nodeName, myPort, "", nodeRole))
-                .receiverPlayer(null).build();
-        requiredSendingMessages.put(mes, Instant.now());
-    }
-
     private SnakesProto.GamePlayer getMyPlayerImage() {
         return GamePlayersMaker.buildGamePlayerImage(
                 nodeId.hashCode(),
@@ -482,45 +491,60 @@ public class NetworkNode extends Subscriber {
                 nodeRole);
     }
 
-    private SnakesProto.GamePlayer getPlayerImageByMessage(SnakesProto.GameMessage message) {
-        return GamePlayersMaker.buildGamePlayerImage(
-                message.getSenderId(),
-                message.getJoin().getName(),
-                senderPort,
-                senderInetAddress.getHostAddress(),
-                SnakesProto.NodeRole.NORMAL);
+    public void sendChangeSnakeDirection(SnakesProto.Direction chosenDirection) {
+        if (nodeRole.equals(MASTER_ROLE)) {
+            int sessionMasterId = gameModel.getSessionMasterId();
+            long masterDirectionChangesNumber = gameModel.getDirectionChangesNumbersByPlayer().get(sessionMasterId);
+            masterDirectionChangesNumber++;
+            gameModel.changeSnakeDirectionById(chosenDirection,
+                    sessionMasterId,
+                    masterDirectionChangesNumber);
+        }
+        if (nodeRole.equals(NORMAL_ROLE) || nodeRole.equals(DEPUTY_ROLE)) {
+            this.sendSteerMessage(chosenDirection);
+        }
+    }
+
+    private void sendSteerMessage(SnakesProto.Direction chosenDirection) {
+        var steerMessage = SnakesProto.GameMessage.SteerMsg.newBuilder()
+                .setDirection(chosenDirection)
+                .build();
+        var gameMessage = SnakesProto.GameMessage.newBuilder()
+                .setMsgSeq(incrementStateNumber())
+                .setSteer(steerMessage)
+                .setSenderId(nodeId.hashCode())
+                .setReceiverId(masterPlayer.getId())
+                .build();
+        CommunicationMessage communicationMessage = CommunicationMessage.builder()
+                .message(gameMessage)
+                .senderPlayer(this.getMyPlayerImage())
+                .receiverPlayer(null)
+                .build();
+        requiredSendingMessages.put(communicationMessage, Instant.now());
+    }
+
+    public static int incrementStateNumber() {
+        DebugPrinter.printWithSpecifiedDateAndName(NetworkNode.class.getSimpleName(),
+                "State number [" + gameStateNumber + "]");
+        return gameStateNumber++;
     }
 
     public UUID getNodeId() {
         return nodeId;
     }
 
-    public static int incrementStateNumber() {
-        DebugPrinter.printWithSpecifiedDateAndName(NetworkNode.class.getSimpleName(), "State number [" + gameStateNumber + "]");
-        return gameStateNumber++;
-    }
-
     public void update() {
         viewController.updateAnn(announcementsTimestamps);
     }
 
-    public void changeDirection(SnakesProto.Direction d) {
-        if (nodeRole == SnakesProto.NodeRole.MASTER) {
-            gameModel.changeSnakeDirectionById(d, gameModel.getSessionMasterId(),
-                    gameModel.getDirectionChangesNumbersByPlayer().get(gameModel.getSessionMasterId()) + 1);
-        }
-        if (nodeRole == SnakesProto.NodeRole.NORMAL || nodeRole == SnakesProto.NodeRole.DEPUTY) {
-            sendSteerMsg(d);
-        }
-    }
-
-    public void changeRole(SnakesProto.NodeRole nodeRole) {
-        masterPlayer = GamePlayersMaker.buildGamePlayerImage(nodeId.hashCode(), nodeName, 0, myInetAddress.getHostAddress(), SnakesProto.NodeRole.MASTER);
-        this.nodeRole = nodeRole;
-    }
-
-    public ConcurrentHashMap<CommunicationMessage, Instant> getRequiredSendingMessages() {
-        return requiredSendingMessages;
+    public void setNewDefaultMasterPlayer() {
+        this.masterPlayer = GamePlayersMaker.buildGamePlayerImage(
+                nodeId.hashCode(),
+                nodeName,
+                0,
+                myInetAddress.getHostAddress(),
+                MASTER_ROLE);
+        this.nodeRole = MASTER_ROLE;
     }
 
     public String getNodeName() {

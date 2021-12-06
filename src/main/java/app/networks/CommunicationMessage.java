@@ -30,6 +30,15 @@ public class CommunicationMessage {
     }
 
     @Override
+    public String toString() {
+        return "CommunicationMessage{" +
+                "message=" + message +
+                ", senderPlayer=" + senderPlayer +
+                ", receiverPlayer=" + receiverPlayer +
+                '}';
+    }
+
+    @Override
     public boolean equals(Object obj) {
         if (obj instanceof CommunicationMessage message) {
             return senderPlayer.getPort() == message.senderPlayer.getPort();
