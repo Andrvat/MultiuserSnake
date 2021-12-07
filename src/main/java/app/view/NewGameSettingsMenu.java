@@ -6,6 +6,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.WindowEvent;
 import java.util.HashMap;
+import java.util.Locale;
 
 public class NewGameSettingsMenu extends JFrame {
     private static final int SETTINGS_MENU_WIDTH = 300;
@@ -23,45 +24,45 @@ public class NewGameSettingsMenu extends JFrame {
     private JButton startButton;
 
     private final HashMap<String, Number> gameProtoDefaultValues = new HashMap<>() {{
-        put("defaultFieldWidth", 40);
-        put("defaultFieldHeight", 30);
+        put("defaultWidth", 40);
+        put("defaultHeight", 30);
         put("defaultFoodStatic", 3);
         put("defaultFoodPerPlayer", 1);
-        put("defaultStateDelayMs", 1000);
+        put("defaultStateDelay", 1000);
         put("defaultFoodProb", 0.1f);
-        put("defaultPingDelayMs", 100);
-        put("defaultNodeTimeoutMs", 800);
+        put("defaultPingDelay", 100);
+        put("defaultNodeTimeout", 800);
 
-        put("minFieldWidth", 10);
-        put("minFieldHeight", 10);
+        put("minWidth", 10);
+        put("minHeight", 10);
         put("minFoodStatic", 0);
         put("minFoodPerPlayer", 0);
-        put("minStateDelayMs", 1);
+        put("minStateDelay", 1);
         put("minFoodProb", 0f);
-        put("minPingDelayMs", 1);
-        put("minNodeTimeoutMs", 1);
+        put("minPingDelay", 1);
+        put("minNodeTimeout", 1);
 
-        put("maxFieldWidth", 100);
-        put("maxFieldHeight", 100);
+        put("maxWidth", 100);
+        put("maxHeight", 100);
         put("maxFoodStatic", 100);
         put("maxFoodPerPlayer", 100);
-        put("maxStateDelayMs", 10000);
+        put("maxStateDelay", 10000);
         put("maxFoodProb", 1f);
-        put("maxPingDelayMs", 10000);
-        put("maxNodeTimeoutMs", 10000);
+        put("maxPingDelay", 10000);
+        put("maxNodeTimeout", 10000);
     }};
 
     private static final Font DEFAULT_LABELS_FONT = new Font("Times New Roman", Font.BOLD, 15);
 
     private final HashMap<String, JTextField> proposedGameDefaultValues = new HashMap<>() {{
-        put("width", new JTextField(Integer.toString((Integer) gameProtoDefaultValues.get("defaultFieldWidth"))));
-        put("height", new JTextField(Integer.toString((Integer) gameProtoDefaultValues.get("defaultFieldHeight"))));
+        put("width", new JTextField(Integer.toString((Integer) gameProtoDefaultValues.get("defaultWidth"))));
+        put("height", new JTextField(Integer.toString((Integer) gameProtoDefaultValues.get("defaultHeight"))));
         put("foodStatic", new JTextField(Integer.toString((Integer) gameProtoDefaultValues.get("defaultFoodStatic"))));
         put("foodPerPlayer", new JTextField(Integer.toString((Integer) gameProtoDefaultValues.get("defaultFoodPerPlayer"))));
-        put("stateDelay", new JTextField(Integer.toString((Integer) gameProtoDefaultValues.get("defaultStateDelayMs"))));
+        put("stateDelay", new JTextField(Integer.toString((Integer) gameProtoDefaultValues.get("defaultStateDelay"))));
         put("foodProb", new JTextField(Float.toString((Float) gameProtoDefaultValues.get("defaultFoodProb"))));
-        put("pingDelay", new JTextField(Integer.toString((Integer) gameProtoDefaultValues.get("defaultPingDelayMs"))));
-        put("nodeTimeout", new JTextField(Integer.toString((Integer) gameProtoDefaultValues.get("defaultNodeTimeoutMs"))));
+        put("pingDelay", new JTextField(Integer.toString((Integer) gameProtoDefaultValues.get("defaultPingDelay"))));
+        put("nodeTimeout", new JTextField(Integer.toString((Integer) gameProtoDefaultValues.get("defaultNodeTimeout"))));
     }};
 
     private final HashMap<String, JLabel> gameFieldsLabels = new HashMap<>() {{
@@ -252,104 +253,40 @@ public class NewGameSettingsMenu extends JFrame {
             float inputFoodProb;
             int inputPingDelay;
             int inputNodeTimeout;
+            String currentVariableName = "OK";
             try {
+                currentVariableName = "Width";
                 inputWidth = Integer.parseInt(proposedGameDefaultValues.get("width").getText());
-            } catch (NumberFormatException exception) {
-                JOptionPane.showConfirmDialog(this,
-                        "Width should be between " + gameProtoDefaultValues.get("minFieldWidth") +
-                                " and " + gameProtoDefaultValues.get("maxFieldWidth"),
-                        "WARNING",
-                        JOptionPane.DEFAULT_OPTION);
-                proposedGameDefaultValues.get("width").setText(
-                        Integer.toString((Integer) gameProtoDefaultValues.get("defaultFieldWidth")));
-                return;
-            }
-            try {
+                currentVariableName = "Height";
                 inputHeight = Integer.parseInt(proposedGameDefaultValues.get("height").getText());
-            } catch (NumberFormatException exception) {
-                JOptionPane.showConfirmDialog(this,
-                        "Height should be between " + gameProtoDefaultValues.get("minFieldHeight") +
-                                " and " + gameProtoDefaultValues.get("maxFieldHeight"),
-                        "WARNING",
-                        JOptionPane.DEFAULT_OPTION);
-                proposedGameDefaultValues.get("height").setText(
-                        Integer.toString((Integer) gameProtoDefaultValues.get("defaultFieldHeight")));
-                return;
-            }
-            try {
+                currentVariableName = "FoodStatic";
                 inputFoodStatic = Integer.parseInt(proposedGameDefaultValues.get("foodStatic").getText());
-            } catch (NumberFormatException exception) {
-                JOptionPane.showConfirmDialog(this,
-                        "Food static should be between " + gameProtoDefaultValues.get("minFoodStatic") +
-                                " and " + gameProtoDefaultValues.get("maxFoodStatic"),
-                        "WARNING",
-                        JOptionPane.DEFAULT_OPTION);
-                proposedGameDefaultValues.get("foodStatic").setText(
-                        Integer.toString((Integer) gameProtoDefaultValues.get("defaultFoodStatic")));
-                return;
-            }
-            try {
+                currentVariableName = "FoodPerPlayer";
                 inputFoodPerPlayer = Integer.parseInt(proposedGameDefaultValues.get("foodPerPlayer").getText());
-            } catch (NumberFormatException exception) {
-                JOptionPane.showConfirmDialog(this,
-                        "Food per player should be between " + gameProtoDefaultValues.get("minFoodPerPlayer") +
-                                " and " + gameProtoDefaultValues.get("maxFoodPerPlayer"),
-                        "WARNING",
-                        JOptionPane.DEFAULT_OPTION);
-                proposedGameDefaultValues.get("foodPerPlayer").setText(
-                        Integer.toString((Integer) gameProtoDefaultValues.get("defaultFoodPerPlayer")));
-                return;
-            }
-            try {
+                currentVariableName = "StateDelay";
                 inputStateDelay = Integer.parseInt(proposedGameDefaultValues.get("stateDelay").getText());
-            } catch (NumberFormatException exception) {
-                JOptionPane.showConfirmDialog(this,
-                        "State delay should be between " + gameProtoDefaultValues.get("minStateDelay") +
-                                " and " + gameProtoDefaultValues.get("maxStateDelay"),
-                        "WARNING",
-                        JOptionPane.DEFAULT_OPTION);
-                proposedGameDefaultValues.get("stateDelay").setText(
-                        Integer.toString((Integer) gameProtoDefaultValues.get("defaultStateDelay")));
-                return;
-            }
-            try {
+                currentVariableName = "FoodProb";
                 inputFoodProb = Float.parseFloat(proposedGameDefaultValues.get("foodProb").getText());
-            } catch (NumberFormatException exception) {
-                JOptionPane.showConfirmDialog(this,
-                        "Food prob should be between " + gameProtoDefaultValues.get("minFoodProb") +
-                                " and " + gameProtoDefaultValues.get("maxFoodProb"),
-                        "WARNING",
-                        JOptionPane.DEFAULT_OPTION);
-                proposedGameDefaultValues.get("foodProb").setText(
-                        Integer.toString((Integer) gameProtoDefaultValues.get("defaultFoodProb")));
-                return;
-            }
-            try {
+                currentVariableName = "PingDelay";
                 inputPingDelay = Integer.parseInt(proposedGameDefaultValues.get("pingDelay").getText());
-            } catch (NumberFormatException exception) {
-                JOptionPane.showConfirmDialog(this,
-                        "Ping delay should be between " + gameProtoDefaultValues.get("minPingDelay") +
-                                " and " + gameProtoDefaultValues.get("maxPingDelay"),
-                        "WARNING",
-                        JOptionPane.DEFAULT_OPTION);
-                proposedGameDefaultValues.get("pingDelay").setText(
-                        Integer.toString((Integer) gameProtoDefaultValues.get("defaultPingDelay")));
-                return;
-            }
-            try {
+                currentVariableName = "NodeTimeout";
                 inputNodeTimeout = Integer.parseInt(proposedGameDefaultValues.get("nodeTimeout").getText());
             } catch (NumberFormatException exception) {
                 JOptionPane.showConfirmDialog(this,
-                        "Node timeout should be between " + gameProtoDefaultValues.get("minNodeTimeout") +
-                                " and " + gameProtoDefaultValues.get("maxNodeTimeout"),
-                        "WARNING",
-                        JOptionPane.DEFAULT_OPTION);
-                proposedGameDefaultValues.get("nodeTimeout").setText(
-                        Integer.toString((Integer) gameProtoDefaultValues.get("defaultNodeTimeout")));
+                        currentVariableName + " should be between " +
+                                gameProtoDefaultValues.get("min" + currentVariableName) +
+                                " and " + gameProtoDefaultValues.get("max" + currentVariableName),
+                        "WARNING", JOptionPane.DEFAULT_OPTION);
+                Number defaultValue = gameProtoDefaultValues.get("default" + currentVariableName);
+                if (defaultValue instanceof Integer) {
+                    proposedGameDefaultValues.get(getStringWithFirstLowerCase(currentVariableName))
+                            .setText(Integer.toString((Integer) defaultValue));
+                } else {
+                    proposedGameDefaultValues.get(getStringWithFirstLowerCase(currentVariableName))
+                            .setText(Float.toString((Float) defaultValue));
+                }
                 return;
             }
-            // 0.8, 100, 5000
-            System.out.println(inputNodeTimeout);
             gameController.launchNewGame(inputWidth, inputHeight,
                     inputFoodStatic, inputFoodPerPlayer,
                     inputStateDelay, inputFoodProb,
@@ -365,5 +302,9 @@ public class NewGameSettingsMenu extends JFrame {
         this.setAutoRequestFocus(true);
         this.pack();
         this.setVisible(true);
+    }
+
+    private static String getStringWithFirstLowerCase(String word) {
+        return word.substring(0, 1).toLowerCase(Locale.ROOT) + word.substring(1);
     }
 }
