@@ -4,28 +4,29 @@ import app.model.GameModel;
 import app.controller.GameController;
 import proto.SnakesProto;
 
+import javax.imageio.ImageIO;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.KeyEvent;
-import java.util.HashMap;
-import java.util.List;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
 
 public class GameField extends JPanel {
-    private int WIDTH;
-    private int HEIGHT;
-    private int SCALE;
+    private int fieldWidth;
+    private int fieldHeight;
+    private int rectScale;
     private final GameModel gameModel;
-    private final HashMap<Integer, Color> snakesColor = new HashMap<>();
-    private final int id;
+    private final int ownerFieldId;
 
-    public GameField(int weight, GameModel gameModel, GameController gameController, int id) {
-        this.id = id;
+    public GameField(int scalePart, GameModel gameModel, GameController gameController, int ownerFieldId) {
+        this.ownerFieldId = ownerFieldId;
         this.gameModel = gameModel;
-        WIDTH = gameModel.getGameState().getConfig().getWidth();
-        HEIGHT = gameModel.getGameState().getConfig().getHeight();
-        SCALE = (int) Math.floor((float) weight / WIDTH);
+        fieldWidth = gameModel.getGameState().getConfig().getWidth();
+        fieldHeight = gameModel.getGameState().getConfig().getHeight();
+        rectScale = (int) Math.floor((float) scalePart / fieldWidth);
 
-        setPreferredSize(setFieldSize());
+        setPreferredSize(new Dimension(fieldWidth * rectScale, fieldHeight * rectScale));
         setBorder(BorderFactory.createLineBorder(Color.red));
         KeyEventDispatcher ked = (e -> {
             if (e.getID() == KeyEvent.KEY_PRESSED) {
@@ -47,52 +48,62 @@ public class GameField extends JPanel {
         KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(ked);
     }
 
-    private Dimension setFieldSize() {
-        return new Dimension(WIDTH * SCALE, HEIGHT * SCALE);
-    }
-
+    @Override
     public void paint(Graphics g) {
-        int width = WIDTH;
-        WIDTH = gameModel.getGameState().getConfig().getWidth();
-        HEIGHT = gameModel.getGameState().getConfig().getHeight();
-        SCALE = (int) Math.floor((float) width * SCALE / WIDTH);
-        paintField(g);
+        int width = fieldWidth;
+        fieldWidth = gameModel.getGameState().getConfig().getWidth();
+        fieldHeight = gameModel.getGameState().getConfig().getHeight();
+        rectScale = (int) Math.floor((float) width * rectScale / fieldWidth);
+        paintGameField(g);
     }
 
-    private void paintField(Graphics g) {
-        g.setColor(Color.darkGray);
-        g.fillRect(0, 0, WIDTH * SCALE, HEIGHT * SCALE);
-        paintSnakes(g);
-        paintFood(g);
-        g.setColor(Color.BLACK);
-        for (int x = 0; x < WIDTH * SCALE; x += SCALE) {
-            g.drawLine(x, 0, x, HEIGHT * SCALE);
-        }
-        for (int y = 0; y < HEIGHT * SCALE; y += SCALE) {
-            g.drawLine(0, y, WIDTH * SCALE, y);
-        }
+    private void paintGameField(Graphics graphics) {
+        paintBackground(graphics);
+        paintAllSnakes(graphics);
+        paintFoods(graphics);
+        paintDelimiterLines(graphics);
     }
 
-    private void paintSnakes(Graphics g) {
-        for (SnakesProto.GameState.Snake snake : gameModel.getGameState().getSnakesList()) {
-            snakesColor.put(snake.getPlayerId(), Color.RED);
-            paintSnake(snake, g);
+    private void paintBackground(Graphics graphics) {
+        graphics.setColor(Color.darkGray);
+        graphics.fillRect(0, 0, fieldWidth * rectScale, fieldHeight * rectScale);
+    }
+
+    private void paintAllSnakes(Graphics graphics) {
+        for (var snake : gameModel.getGameState().getSnakesList()) {
+            paintSnake(snake, graphics);
         }
     }
 
-    private void paintSnake(SnakesProto.GameState.Snake snake, Graphics g) {
-        List<SnakesProto.GameState.Coord> list = gameModel.getSnakeAllCoordinates(snake);
-        if (snake.getPlayerId() == id) g.setColor(Color.YELLOW);
-        else g.setColor(Color.RED);
-        for (SnakesProto.GameState.Coord coord : list) {
-            g.fillRect(coord.getX() * SCALE + 1, coord.getY() * SCALE + 1, SCALE, SCALE);
+    private void paintSnake(SnakesProto.GameState.Snake snake, Graphics graphics) {
+        var snakeAllCoordinates = gameModel.getSnakeAllCoordinates(snake);
+        for (var coordinate : snakeAllCoordinates) {
+            graphics.setColor(Color.ORANGE);
+            if (snake.getPlayerId() == ownerFieldId && coordinate.equals(snakeAllCoordinates.getFirst())) {
+                graphics.setColor(Color.YELLOW);
+            }
+            graphics.fillRect(coordinate.getX() * rectScale,
+                    coordinate.getY() * rectScale,
+                    rectScale, rectScale);
         }
     }
 
-    private void paintFood(Graphics g) {
-        for (SnakesProto.GameState.Coord coord : gameModel.getGameState().getFoodsList()) {
-            g.setColor(Color.GREEN);
-            g.fillRect(coord.getX() * SCALE + 1, coord.getY() * SCALE + 1, SCALE - 1, SCALE - 1);
+    private void paintFoods(Graphics graphics) {
+        for (var foodCoordinate : gameModel.getGameState().getFoodsList()) {
+            graphics.setColor(Color.RED);
+            graphics.fillRect(foodCoordinate.getX() * rectScale,
+                    foodCoordinate.getY() * rectScale,
+                    rectScale, rectScale);
+        }
+    }
+
+    private void paintDelimiterLines(Graphics graphics) {
+        graphics.setColor(Color.BLACK);
+        for (int x = 0; x < fieldWidth * rectScale; x += rectScale) {
+            graphics.drawLine(x, 0, x, fieldHeight * rectScale);
+        }
+        for (int y = 0; y < fieldHeight * rectScale; y += rectScale) {
+            graphics.drawLine(0, y, fieldWidth * rectScale, y);
         }
     }
 }

@@ -18,7 +18,6 @@ public class GameMainDisplay extends JFrame {
     private final GameMainMenu gameMainMenu;
 
     public GameMainDisplay(int screenWidth, int screenHeight,
-                           int gameFieldWidth, int gameFieldHeight,
                            GameController gameController, GameModel gameModel,
                            int ownerNodeId) {
         gameField = new GameField(screenWidth / 2, gameModel, gameController, ownerNodeId);

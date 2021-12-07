@@ -24,7 +24,6 @@ public class ViewController extends Subscriber {
                 .networkNode(networkNode)
                 .build();
         this.gameMainDisplay = new GameMainDisplay(SCREEN_WIDTH, SCREEN_HEIGHT,
-                gameModel.getWidthFromGameConfig(), gameModel.getHeightFromGameConfig(),
                 gameController, gameModel, networkNode.getNodeId().hashCode());
     }
 

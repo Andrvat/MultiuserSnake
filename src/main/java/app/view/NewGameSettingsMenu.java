@@ -23,6 +23,8 @@ public class NewGameSettingsMenu extends JFrame {
     private static final int START_BUTTON_HEIGHT = 40;
     private JButton startButton;
 
+    private static final Font DEFAULT_LABELS_FONT = new Font("Times New Roman", Font.BOLD, 15);
+
     private final HashMap<String, Number> gameProtoDefaultValues = new HashMap<>() {{
         put("defaultWidth", 40);
         put("defaultHeight", 30);
@@ -51,8 +53,6 @@ public class NewGameSettingsMenu extends JFrame {
         put("maxPingDelay", 10000);
         put("maxNodeTimeout", 10000);
     }};
-
-    private static final Font DEFAULT_LABELS_FONT = new Font("Times New Roman", Font.BOLD, 15);
 
     private final HashMap<String, JTextField> proposedGameDefaultValues = new HashMap<>() {{
         put("width", new JTextField(Integer.toString((Integer) gameProtoDefaultValues.get("defaultWidth"))));
@@ -274,8 +274,8 @@ public class NewGameSettingsMenu extends JFrame {
             } catch (NumberFormatException exception) {
                 JOptionPane.showConfirmDialog(this,
                         currentVariableName + " should be between " +
-                                gameProtoDefaultValues.get("min" + currentVariableName) +
-                                " and " + gameProtoDefaultValues.get("max" + currentVariableName),
+                                gameProtoDefaultValues.get("min" + currentVariableName) + " and " +
+                                gameProtoDefaultValues.get("max" + currentVariableName),
                         "WARNING", JOptionPane.DEFAULT_OPTION);
                 Number defaultValue = gameProtoDefaultValues.get("default" + currentVariableName);
                 if (defaultValue instanceof Integer) {
