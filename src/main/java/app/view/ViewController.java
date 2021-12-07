@@ -11,9 +11,10 @@ import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class ViewController extends Subscriber {
-    private final GameDisplay gameDisplay;
     private static final int SCREEN_WIDTH = 1920;
     private static final int SCREEN_HEIGHT = 1080;
+
+    private final GameMainDisplay gameMainDisplay;
 
     @Builder
     public ViewController(GameModel gameModel, NetworkNode networkNode) {
@@ -22,17 +23,17 @@ public class ViewController extends Subscriber {
                 .gameModel(gameModel)
                 .networkNode(networkNode)
                 .build();
-        this.gameDisplay = new GameDisplay(SCREEN_WIDTH, SCREEN_HEIGHT,
+        this.gameMainDisplay = new GameMainDisplay(SCREEN_WIDTH, SCREEN_HEIGHT,
                 gameModel.getWidthFromGameConfig(), gameModel.getHeightFromGameConfig(),
                 gameController, gameModel, networkNode.getNodeId().hashCode());
     }
 
     @Override
     public void updateState() {
-        gameDisplay.updateDisplay();
+        gameMainDisplay.updateDisplay();
     }
 
     public void updateAvailableGames(ConcurrentHashMap<CommunicationMessage, Instant> availableGames) {
-        gameDisplay.updateGames(availableGames);
+        gameMainDisplay.updateGames(availableGames);
     }
 }

@@ -13,7 +13,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class MainMenu extends JPanel {
+public class GameMainMenu extends JPanel {
     JPanel box = new JPanel();
     JPanel ann = new JPanel();
     JPanel score = new JPanel();
@@ -22,7 +22,7 @@ public class MainMenu extends JPanel {
     JButton buttonNewGame = new JButton("Новая игра");
     JButton updateAnn = new JButton("Обновить");
 
-    public MainMenu(GameController gameController, GameModel gameModel) {
+    public GameMainMenu(GameController gameController, GameModel gameModel) {
         this.gameModel = gameModel;
         box.setLayout(new BoxLayout(box, BoxLayout.Y_AXIS));
         ann.setLayout(new BoxLayout(ann, BoxLayout.Y_AXIS));
@@ -30,7 +30,7 @@ public class MainMenu extends JPanel {
         setPreferredSize(new Dimension(800, 800));
 
         this.gameController = gameController;
-        buttonNewGame.addActionListener((e) -> new SettingsMenu(gameController));
+        buttonNewGame.addActionListener((e) -> new NewGameSettingsMenu(gameController));
         updateAnn.addActionListener((e) -> gameController.updateOnlineGames());
         add(box);
         box.add(buttonNewGame);
@@ -52,7 +52,7 @@ public class MainMenu extends JPanel {
         validate();
     }
 
-    public void printAnn(ConcurrentHashMap<CommunicationMessage, Instant> announcement) {
+    public void printAvailableGames(ConcurrentHashMap<CommunicationMessage, Instant> announcement) {
         ann.removeAll();
         for (Map.Entry<CommunicationMessage, Instant> entry : announcement.entrySet()) {
             JPanel panel = new JPanel(new BorderLayout());

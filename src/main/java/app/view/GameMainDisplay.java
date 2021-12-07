@@ -11,26 +11,27 @@ import java.awt.event.WindowEvent;
 import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class GameDisplay extends JFrame {
+public class GameMainDisplay extends JFrame {
     private static final String GAME_NAME = "ONLINE SNAKE";
 
     private final GameField gameField;
-    private final MainMenu mainMenu;
+    private final GameMainMenu gameMainMenu;
 
-    public GameDisplay(int screenWidth, int screenHeight,
-                       int gameFieldWidth, int gameFieldHeight,
-                       GameController gameController, GameModel gameModel, int ownerNodeId) {
+    public GameMainDisplay(int screenWidth, int screenHeight,
+                           int gameFieldWidth, int gameFieldHeight,
+                           GameController gameController, GameModel gameModel,
+                           int ownerNodeId) {
+        gameField = new GameField(screenWidth / 2, gameModel, gameController, ownerNodeId);
+        gameMainMenu = new GameMainMenu(gameController, gameModel);
+
         this.setSize(new Dimension(screenWidth, screenHeight));
         this.setLayout(new BorderLayout());
         this.setTitle(GAME_NAME);
         this.setScreenListenerForCloseOperation();
         this.setResizable(false);
-        gameField = new GameField(screenWidth / 2, gameModel, gameController, ownerNodeId);
-        mainMenu = new MainMenu(gameController, gameModel);
-        add(gameField, BorderLayout.WEST);
-        add(mainMenu, BorderLayout.EAST);
-
-        setVisible(true);
+        this.add(gameField, BorderLayout.WEST);
+        this.add(gameMainMenu, BorderLayout.EAST);
+        this.setVisible(true);
     }
 
     private void setScreenListenerForCloseOperation() {
@@ -39,10 +40,11 @@ public class GameDisplay extends JFrame {
         this.addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
-                int chosenOption = JOptionPane.showConfirmDialog(thisFrame,
-                        "Are you sure?",
-                        "Exit",
-                        JOptionPane.YES_NO_OPTION);
+                int chosenOption =
+                        JOptionPane.showConfirmDialog(thisFrame,
+                                "Are you sure?",
+                                "Exit",
+                                JOptionPane.YES_NO_OPTION);
                 if (isYesChosen(chosenOption)) {
                     System.exit(0);
                 }
@@ -57,11 +59,11 @@ public class GameDisplay extends JFrame {
     public void updateDisplay() {
         gameField.setFocusable(true);
         gameField.requestFocusInWindow();
-        mainMenu.printScore();
+        gameMainMenu.printScore();
         gameField.repaint();
     }
 
-    public void updateGames(ConcurrentHashMap<CommunicationMessage, Instant> ann) {
-        mainMenu.printAnn(ann);
+    public void updateGames(ConcurrentHashMap<CommunicationMessage, Instant> availableGames) {
+        gameMainMenu.printAvailableGames(availableGames);
     }
 }
