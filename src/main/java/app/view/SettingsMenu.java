@@ -120,7 +120,7 @@ public class SettingsMenu extends JFrame {
             if (h_ < 1) {
                 h_ = 30;
             }
-            gameController.newGame(w_, h_, food_, foodapp_, delay_);
+            gameController.launchNewGame(w_, h_, food_, foodapp_, delay_, (float) 0.8, 1000, 5000);
             dispatchEvent(new WindowEvent(this, WindowEvent.WINDOW_CLOSING));
         });
         add(start, gbc);

@@ -2,66 +2,52 @@ package app.controller;
 
 import app.networks.NetworkNode;
 import app.model.GameModel;
+import app.utilities.DebugPrinter;
+import lombok.Builder;
 import proto.SnakesProto;
 
+@Builder
 public class GameController {
     private final GameModel gameModel;
     private final NetworkNode networkNode;
 
-    public GameController(GameModel gameModel, NetworkNode networkNode) {
-        this.gameModel = gameModel;
-        this.networkNode = networkNode;
-    }
-
-//    public void newGame() {
-//        SnakesProto.GameConfig gameConfig = SnakesProto.GameConfig.newBuilder()
-//                .setWidth(40)
-//                .setHeight(30)
-//                .setFoodStatic(50)
-//                .setFoodPerPlayer((float) 0.2)
-//                .setStateDelayMs(500)
-//                .setDeadFoodProb((float) 0.8)
-//                .setPingDelayMs(100)
-//                .setNodeTimeoutMs(9000)
-//                .build();
-//        gameModel.launchNewGameAsMaster(gameConfig, networkNode.getNodeName(), networkNode.getNodeId().hashCode(), networkNode.getMyPort());
-//        networkNode.setNewMasterPlayer(SnakesProto.NodeRole.MASTER);
-//        System.out.println("NEW GAME!");
-//    }
-
-    public void newGame(int w, int h, int fs, float fp, int delay) {
-        SnakesProto.GameConfig gameConfig = SnakesProto.GameConfig.newBuilder()
-                .setWidth(w)
-                .setHeight(h)
-                .setFoodStatic(fs)
-                .setFoodPerPlayer(fp)
-                .setStateDelayMs(delay)
-                .setDeadFoodProb((float) 0.8)
-                .setPingDelayMs(100)
-                .setNodeTimeoutMs(9000)
+    public void launchNewGame(int gameWidth, int gameHeight,
+                              int gameFoodStatic, float gameFoodPerPlayer,
+                              int stateDelay, float gameDeadFoodProb,
+                              int gamePingDelayMs, int gameNodeTimeoutMs) {
+        var gameConfig = SnakesProto.GameConfig.newBuilder()
+                .setWidth(gameWidth)
+                .setHeight(gameHeight)
+                .setFoodStatic(gameFoodStatic)
+                .setFoodPerPlayer(gameFoodPerPlayer)
+                .setStateDelayMs(stateDelay)
+                .setDeadFoodProb(gameDeadFoodProb)
+                .setPingDelayMs(gamePingDelayMs)
+                .setNodeTimeoutMs(gameNodeTimeoutMs)
                 .build();
-        gameModel.launchNewGameAsMaster(gameConfig, networkNode.getNodeName(), networkNode.getNodeId().hashCode(), networkNode.getMyPort());
+        gameModel.launchNewGameAsMaster(gameConfig, networkNode.getNodeName(),
+                networkNode.getNodeId().hashCode(), networkNode.getMyPort());
         networkNode.setNewDefaultMasterPlayer();
-        System.out.println("NEW GAME!");
+        DebugPrinter.printWithSpecifiedDateAndName(this.getClass().getSimpleName(), "New game");
     }
 
     public void changeDirection(SnakesProto.Direction direction) {
         networkNode.sendChangeSnakeDirection(direction);
     }
 
-    public void nModelSub() {
+    public void updateOnlineGames() {
         gameModel.informAllSubscribers();
     }
 
-    public void join(SnakesProto.GamePlayer player) {
-        networkNode.sendJoinGameMessage(player);
+    public void joinToPlayerGame(SnakesProto.GamePlayer gameOwner) {
+        networkNode.sendJoinGameMessage(gameOwner);
     }
 
-    public void exit() {
-        networkNode.sendRoleChangeMessage(null, SnakesProto.NodeRole.VIEWER, SnakesProto.NodeRole.VIEWER);
+    public void exitFromGame() {
+        networkNode.sendRoleChangeMessage(null, SnakesProto.NodeRole.VIEWER, null);
     }
 
-    public boolean checkAlive() {
+    public boolean isMySnakeAlive() {
         return gameModel.isPlayerSnakeAlive(networkNode.getNodeId().hashCode());
     }
 }

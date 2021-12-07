@@ -67,8 +67,10 @@ public class NetworkNode extends Subscriber {
         this.myPort = myPort;
         this.nodeId = nodeId;
 
-        viewController = new ViewController(this.gameModel, this);
-
+        viewController = ViewController.builder()
+                .networkNode(this)
+                .gameModel(gameModel)
+                .build();
         multicastSocket = new MulticastSocket(MULTICAST_PORT);
         datagramSocket = new DatagramSocket(myPort, myInetAddress);
         connectMulticastSocketToGroup();
@@ -464,6 +466,7 @@ public class NetworkNode extends Subscriber {
                                       SnakesProto.NodeRole receiverPlayerRole) {
         if (receiverPlayer == null) {
             receiverPlayer = masterPlayer;
+            receiverPlayerRole = MASTER_ROLE;
         }
         var roleChangeMessage = SnakesProto.GameMessage.RoleChangeMsg.newBuilder()
                 .setSenderRole(senderPlayerRole)
@@ -533,8 +536,8 @@ public class NetworkNode extends Subscriber {
         return nodeId;
     }
 
-    public void update() {
-        viewController.updateAnn(announcementsTimestamps);
+    public void updateState() {
+        viewController.updateAvailableGames(announcementsTimestamps);
     }
 
     public void setNewDefaultMasterPlayer() {

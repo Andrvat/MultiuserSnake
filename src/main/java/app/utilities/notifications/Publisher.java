@@ -8,7 +8,7 @@ public abstract class Publisher {
 
     public void informAllSubscribers() {
         for (var subscriber : subscribers) {
-            subscriber.update();
+            subscriber.updateState();
         }
     }
 

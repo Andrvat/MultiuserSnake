@@ -116,7 +116,7 @@ public class GameModel extends Publisher {
         for (var snake : gameState.getSnakesList()) {
             snakesAllCoordinatesByPlayer.put(snake.getPlayerId(), getSnakeAllCoordinates(snake));
         }
-        informAllSubscribers();
+        this.informAllSubscribers();
     }
 
     public void addNewPlayerToModel(SnakesProto.GamePlayer newPlayer) {

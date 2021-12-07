@@ -5,30 +5,34 @@ import app.networks.NetworkNode;
 import app.controller.GameController;
 import app.networks.CommunicationMessage;
 import app.utilities.notifications.Subscriber;
+import lombok.Builder;
 
 import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class ViewController extends Subscriber {
-    NetworkNode networkNode;
-    GameDisplay gameDisplay;
-    GameController gameController;
-    int w = 1600;
-    int h = w / 2;
+    private final GameDisplay gameDisplay;
+    private static final int SCREEN_WIDTH = 1920;
+    private static final int SCREEN_HEIGHT = 1080;
 
+    @Builder
     public ViewController(GameModel gameModel, NetworkNode networkNode) {
         super(gameModel);
-        this.networkNode = networkNode;
-        gameController = new GameController(gameModel, networkNode);
-        gameDisplay = new GameDisplay(w, h, gameModel.getWidthFromGameConfig(), gameModel.getHeightFromGameConfig(), gameController, gameModel, networkNode.getNodeId().hashCode());
+        GameController gameController = GameController.builder()
+                .gameModel(gameModel)
+                .networkNode(networkNode)
+                .build();
+        this.gameDisplay = new GameDisplay(SCREEN_WIDTH, SCREEN_HEIGHT,
+                gameModel.getWidthFromGameConfig(), gameModel.getHeightFromGameConfig(),
+                gameController, gameModel, networkNode.getNodeId().hashCode());
     }
 
     @Override
-    public void update() {
-        gameDisplay.update();
+    public void updateState() {
+        gameDisplay.updateDisplay();
     }
 
-    public void updateAnn(ConcurrentHashMap<CommunicationMessage, Instant> ann) {
-        gameDisplay.updateAnn(ann);
+    public void updateAvailableGames(ConcurrentHashMap<CommunicationMessage, Instant> availableGames) {
+        gameDisplay.updateGames(availableGames);
     }
 }
