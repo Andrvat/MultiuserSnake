@@ -17,16 +17,24 @@ public class GameMainDisplay extends JFrame {
     private final GameField gameField;
     private final GameMainMenu gameMainMenu;
 
-    private static final int LAYOUT_GAME_FIELD_WEST_PAD = 30;
-    private static final int LAYOUT_GAME_MENU_WEST_PAD = 1400;
+    private static final int LAYOUT_SIDE_PAD = 30;
     private static final int LAYOUT_NORTH_PAD = 30;
+
+    private static final int SCREEN_WIDTH_DELIMITER_FACTOR = 2;
+    private static final int SCREEN_HEIGHT_DELIMITER_FACTOR = 10;
+    private static final int SCREEN_HEIGHT_MULTIPLAYER_FACTOR = 9;
 
     public GameMainDisplay(int screenWidth, int screenHeight,
                            GameController gameController, GameModel gameModel,
                            int ownerNodeId) {
-        gameField = new GameField(screenWidth / 2, screenHeight / 10 * 9,
+        gameField = new GameField(
+                screenWidth / SCREEN_WIDTH_DELIMITER_FACTOR,
+                screenHeight / SCREEN_HEIGHT_DELIMITER_FACTOR * SCREEN_HEIGHT_MULTIPLAYER_FACTOR,
                 gameModel, gameController, ownerNodeId);
-        gameMainMenu = new GameMainMenu(gameController, gameModel);
+        gameMainMenu = new GameMainMenu(
+                screenWidth / SCREEN_WIDTH_DELIMITER_FACTOR,
+                screenHeight / SCREEN_HEIGHT_DELIMITER_FACTOR * SCREEN_HEIGHT_MULTIPLAYER_FACTOR,
+                gameController, gameModel);
 
         this.setSize(new Dimension(screenWidth, screenHeight));
         this.setTitle(GAME_NAME);
@@ -42,8 +50,8 @@ public class GameMainDisplay extends JFrame {
 
         springLayout.putConstraint(SpringLayout.NORTH, gameField, LAYOUT_NORTH_PAD, SpringLayout.NORTH, contentPane);
         springLayout.putConstraint(SpringLayout.NORTH, gameMainMenu, LAYOUT_NORTH_PAD, SpringLayout.NORTH, contentPane);
-        springLayout.putConstraint(SpringLayout.WEST, gameField, LAYOUT_GAME_FIELD_WEST_PAD, SpringLayout.WEST, contentPane);
-        springLayout.putConstraint(SpringLayout.WEST, gameMainMenu, LAYOUT_GAME_MENU_WEST_PAD, SpringLayout.WEST, contentPane);
+        springLayout.putConstraint(SpringLayout.WEST, gameField, LAYOUT_SIDE_PAD, SpringLayout.WEST, contentPane);
+        springLayout.putConstraint(SpringLayout.EAST, gameMainMenu, LAYOUT_SIDE_PAD, SpringLayout.EAST, contentPane);
 
         this.setVisible(true);
     }

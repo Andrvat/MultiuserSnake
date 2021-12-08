@@ -19,8 +19,8 @@ public class NetworkNode extends Subscriber {
     private static final String MULTICAST_IP = "239.192.0.4";
     private static final int MULTICAST_PORT = 9192;
     // TODO: падает exception при условии, что node timeout из конфига > эти значения
-    private static final int SOCKETS_TIMEOUT_IN_MILLIS = 100;
-    private static final int ANNOUNCEMENT_MESSAGE_PERIOD_IN_MILLIS = 100;
+    private static final int SOCKETS_TIMEOUT_IN_MILLIS = 700;
+    private static final int ANNOUNCEMENT_MESSAGE_PERIOD_IN_MILLIS = 700;
 
     private final String nodeName;
     private SnakesProto.NodeRole nodeRole;
@@ -75,7 +75,7 @@ public class NetworkNode extends Subscriber {
         multicastSocket = new MulticastSocket(MULTICAST_PORT);
         datagramSocket = new DatagramSocket(myPort, myInetAddress);
         connectMulticastSocketToGroup();
-        setTimeoutsForSockets();
+        //setTimeoutsForSockets();
     }
 
     private void connectMulticastSocketToGroup() throws IOException {
@@ -496,6 +496,7 @@ public class NetworkNode extends Subscriber {
     }
 
     public void sendChangeSnakeDirection(SnakesProto.Direction chosenDirection) {
+        System.out.println("ROLE: " + nodeRole.toString());
         if (nodeRole.equals(MASTER_ROLE)) {
             int sessionMasterId = gameModel.getSessionMasterId();
             long masterDirectionChangesNumber = gameModel.getDirectionChangesNumbersByPlayer().get(sessionMasterId);
