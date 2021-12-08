@@ -4,69 +4,77 @@ import app.model.GameModel;
 import app.controller.GameController;
 import proto.SnakesProto;
 
-import javax.imageio.ImageIO;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.KeyEvent;
-import java.awt.image.BufferedImage;
-import java.io.File;
-import java.io.IOException;
 
 public class GameField extends JPanel {
     private int fieldWidth;
     private int fieldHeight;
-    private int rectScale;
+    private int widthRectScale;
+    private int heightRectScale;
     private final GameModel gameModel;
     private final int ownerFieldId;
 
-    public GameField(int scalePart, GameModel gameModel, GameController gameController, int ownerFieldId) {
-        this.ownerFieldId = ownerFieldId;
+    public GameField(int widthScale, int heightScale,
+                     GameModel gameModel, GameController gameController,
+                     int ownerFieldId) {
         this.gameModel = gameModel;
+        this.ownerFieldId = ownerFieldId;
+
         fieldWidth = gameModel.getGameState().getConfig().getWidth();
         fieldHeight = gameModel.getGameState().getConfig().getHeight();
-        rectScale = (int) Math.floor((float) scalePart / fieldWidth);
+        widthRectScale = (int) Math.floor((float) widthScale / fieldWidth);
+        heightRectScale = (int) Math.floor((float) heightScale / fieldHeight);
 
-        setPreferredSize(new Dimension(fieldWidth * rectScale, fieldHeight * rectScale));
-        setBorder(BorderFactory.createLineBorder(Color.red));
-        KeyEventDispatcher ked = (e -> {
-            if (e.getID() == KeyEvent.KEY_PRESSED) {
-                if ((e.getKeyCode() == KeyEvent.VK_UP) || (e.getKeyCode() == KeyEvent.VK_W)) {
+        this.setPreferredSize(new Dimension(widthScale, heightScale));
+        this.setBorder(BorderFactory.createLineBorder(Color.BLACK));
+        this.addUserStepsKeyDispatcher(gameController);
+        this.setVisible(true);
+    }
+
+    private void addUserStepsKeyDispatcher(GameController gameController) {
+        KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher((event -> {
+            if (event.getID() == KeyEvent.KEY_PRESSED) {
+                if (event.getKeyCode() == KeyEvent.VK_UP) {
                     gameController.changeDirection(SnakesProto.Direction.UP);
                 }
-                if ((e.getKeyCode() == KeyEvent.VK_DOWN) || (e.getKeyCode() == KeyEvent.VK_S)) {
+                if (event.getKeyCode() == KeyEvent.VK_DOWN) {
                     gameController.changeDirection(SnakesProto.Direction.DOWN);
                 }
-                if ((e.getKeyCode() == KeyEvent.VK_LEFT) || (e.getKeyCode() == KeyEvent.VK_A)) {
+                if (event.getKeyCode() == KeyEvent.VK_LEFT) {
                     gameController.changeDirection(SnakesProto.Direction.LEFT);
                 }
-                if ((e.getKeyCode() == KeyEvent.VK_RIGHT) || (e.getKeyCode() == KeyEvent.VK_D)) {
+                if (event.getKeyCode() == KeyEvent.VK_RIGHT) {
                     gameController.changeDirection((SnakesProto.Direction.RIGHT));
                 }
             }
             return false;
-        });
-        KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(ked);
+        }));
     }
+
 
     @Override
     public void paint(Graphics g) {
-        int width = fieldWidth;
+        int lastWidth = fieldWidth;
+        int lastHeight = fieldHeight;
         fieldWidth = gameModel.getGameState().getConfig().getWidth();
         fieldHeight = gameModel.getGameState().getConfig().getHeight();
-        rectScale = (int) Math.floor((float) width * rectScale / fieldWidth);
+        widthRectScale = (int) Math.floor((float) lastWidth * widthRectScale / fieldWidth);
+        heightRectScale = (int) Math.floor((float) lastHeight * heightRectScale / fieldHeight);
         paintGameField(g);
     }
 
     private void paintGameField(Graphics graphics) {
         paintBackground(graphics);
+        paintDelimiterLines(graphics);
         paintAllSnakes(graphics);
         paintFoods(graphics);
-        paintDelimiterLines(graphics);
     }
 
     private void paintBackground(Graphics graphics) {
         graphics.setColor(Color.darkGray);
-        graphics.fillRect(0, 0, fieldWidth * rectScale, fieldHeight * rectScale);
+        graphics.fillRect(0, 0, this.getWidth(), this.getHeight());
     }
 
     private void paintAllSnakes(Graphics graphics) {
@@ -82,28 +90,28 @@ public class GameField extends JPanel {
             if (snake.getPlayerId() == ownerFieldId && coordinate.equals(snakeAllCoordinates.getFirst())) {
                 graphics.setColor(Color.YELLOW);
             }
-            graphics.fillRect(coordinate.getX() * rectScale,
-                    coordinate.getY() * rectScale,
-                    rectScale, rectScale);
+            graphics.fillRect(coordinate.getX() * widthRectScale,
+                    coordinate.getY() * heightRectScale,
+                    widthRectScale, heightRectScale);
         }
     }
 
     private void paintFoods(Graphics graphics) {
         for (var foodCoordinate : gameModel.getGameState().getFoodsList()) {
             graphics.setColor(Color.RED);
-            graphics.fillRect(foodCoordinate.getX() * rectScale,
-                    foodCoordinate.getY() * rectScale,
-                    rectScale, rectScale);
+            graphics.fillRect(foodCoordinate.getX() * widthRectScale,
+                    foodCoordinate.getY() * heightRectScale,
+                    widthRectScale, heightRectScale);
         }
     }
 
     private void paintDelimiterLines(Graphics graphics) {
         graphics.setColor(Color.BLACK);
-        for (int x = 0; x < fieldWidth * rectScale; x += rectScale) {
-            graphics.drawLine(x, 0, x, fieldHeight * rectScale);
+        for (int x = 0; x < fieldWidth * widthRectScale; x += widthRectScale) {
+            graphics.drawLine(x, 0, x, this.getHeight());
         }
-        for (int y = 0; y < fieldHeight * rectScale; y += rectScale) {
-            graphics.drawLine(0, y, fieldWidth * rectScale, y);
+        for (int y = 0; y < fieldHeight * heightRectScale; y += heightRectScale) {
+            graphics.drawLine(0, y, this.getWidth(), y);
         }
     }
 }

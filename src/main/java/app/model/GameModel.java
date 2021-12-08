@@ -11,6 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import static java.lang.Math.abs;
 
 public class GameModel extends Publisher {
+    private static final int INITIAL_GAME_FIELD_SIZE = 20;
     private static final int INITIAL_STATE_ORDER = 0;
     private static final long ZERO_DIRECTION_CHANGES = 0L;
     private static final int SNAKE_HEAD_INDEX = 0;
@@ -30,14 +31,8 @@ public class GameModel extends Publisher {
     // TODO: если убрать sets, то новый игрок не может начать играть по кнопке Войти.
     private SnakesProto.GameConfig getDefaultGameConfig() {
         return SnakesProto.GameConfig.newBuilder()
-                .setWidth(10)
-                .setHeight(10)
-                .setFoodStatic(10)
-                .setFoodPerPlayer((float) 0.2)
-                .setStateDelayMs(1000)
-                .setDeadFoodProb((float) 0.2)
-                .setPingDelayMs(3000)
-                .setNodeTimeoutMs(9000)
+                .setWidth(INITIAL_GAME_FIELD_SIZE)
+                .setHeight(INITIAL_GAME_FIELD_SIZE)
                 .build();
     }
 

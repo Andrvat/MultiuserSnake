@@ -27,7 +27,7 @@ public class GameMainMenu extends JPanel {
         box.setLayout(new BoxLayout(box, BoxLayout.Y_AXIS));
         ann.setLayout(new BoxLayout(ann, BoxLayout.Y_AXIS));
         score.setLayout(new BoxLayout(score, BoxLayout.Y_AXIS));
-        setPreferredSize(new Dimension(800, 800));
+        setPreferredSize(new Dimension(200, 200));
 
         this.gameController = gameController;
         buttonNewGame.addActionListener((e) -> new NewGameSettingsMenu(gameController));
