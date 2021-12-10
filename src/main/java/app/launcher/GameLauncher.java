@@ -25,6 +25,7 @@ public class GameLauncher {
             networkNode.startCommunicating();
         } catch (Exception exception) {
             exception.printStackTrace();
+            System.exit(0);
         }
     }
 }

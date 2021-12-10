@@ -19,8 +19,8 @@ public class NetworkNode extends Subscriber {
     private static final String MULTICAST_IP = "239.192.0.4";
     private static final int MULTICAST_PORT = 9192;
     // TODO: падает exception при условии, что node timeout из конфига > эти значения
-    private static final int SOCKETS_TIMEOUT_IN_MILLIS = 700;
-    private static final int ANNOUNCEMENT_MESSAGE_PERIOD_IN_MILLIS = 700;
+    private static final int SOCKETS_TIMEOUT_IN_MILLIS = 500;
+    private static final int ANNOUNCEMENT_MESSAGE_PERIOD_IN_MILLIS = 99;
 
     private final String nodeName;
     private SnakesProto.NodeRole nodeRole;
@@ -105,6 +105,12 @@ public class NetworkNode extends Subscriber {
         multicastReceiver.start();
 
         while (true) {
+//            new Thread(() -> {
+//                var masterPlayer = gameModel.getPlayerById(gameModel.getSessionMasterId());
+//                if (masterPlayer != null && moreTimeHasPassedThanPeriod(lastSentMessageTimestamp, gameModel.getGameConfig().getPingDelayMs())) {
+//                    this.sendPingMessage(masterPlayer);
+//                }
+//            }).start();
             communicate();
         }
     }
@@ -145,6 +151,7 @@ public class NetworkNode extends Subscriber {
                                     .setState(gameModel.getGameState()).build())
                             .build());
                 }
+                System.err.println("BEFORE SENDING IN 148 LINE: SENDER ID {" + correspondingMessage.getMessage().getSenderId() + "}");
                 var messageBytes = correspondingMessage.getMessage().toByteArray();
                 sendingDatagramPacket = new DatagramPacket(
                         messageBytes,
@@ -154,6 +161,7 @@ public class NetworkNode extends Subscriber {
                 if (correspondingMessage.getMessage().getTypeCase()
                         .equals(SnakesProto.GameMessage.TypeCase.STATE) && hasTimePassed) {
                     datagramSocket.send(sendingDatagramPacket);
+                    requiredSendingMessages.remove(correspondingMessage);
                 } else {
                     datagramSocket.send(sendingDatagramPacket);
                     if (!correspondingMessage.getMessage().getTypeCase().equals(SnakesProto.GameMessage.TypeCase.ACK)) {
@@ -207,16 +215,19 @@ public class NetworkNode extends Subscriber {
     }
 
     private void processPlayersActivitiesByPings() {
+        //DebugPrinter.printWithSpecifiedDateAndName("processPlayersActivitiesByPings", gameModel.toString());
+        long currentTimeMs = getEpochMillisBySystemClockInstant();
         for (var activityTimestamp : gameModel.getActivitiesTimestampsByPlayer().entrySet()) {
-            if (Instant.now().toEpochMilli() - activityTimestamp.getValue().toEpochMilli() >
+            if (currentTimeMs - activityTimestamp.getValue().toEpochMilli() >
                     gameModel.getGameState().getConfig().getNodeTimeoutMs()) {
-                if (gameModel.getPlayerById(activityTimestamp.getKey()).getRole().equals(MASTER_ROLE)) {
+                if (MASTER_ROLE.equals(gameModel.getPlayerById(activityTimestamp.getKey()).getRole())) {
                     if (nodeRole.equals(DEPUTY_ROLE)) {
                         nodeRole = MASTER_ROLE;
                         gameModel.rebuiltGameModel(nodeId.hashCode());
                         for (var player : gameModel.getGameState().getPlayers().getPlayersList()) {
                             this.sendRoleChangeMessage(player, MASTER_ROLE, NORMAL_ROLE);
                         }
+                        deputyPlayer = null;
                     } else if (nodeRole.equals(NORMAL_ROLE)) {
                         masterPlayer = GamePlayersMaker.getDeputyPlayerFromList(gameModel.getGameState().getPlayers());
                     }
@@ -224,7 +235,7 @@ public class NetworkNode extends Subscriber {
                 this.sendPingMessage(gameModel.getPlayerById(activityTimestamp.getKey()));
             }
         }
-        lastSentMessageTimestamp = Instant.now().toEpochMilli();
+        lastSentMessageTimestamp = getEpochMillisBySystemClockInstant();
         System.gc();
     }
 
@@ -299,6 +310,8 @@ public class NetworkNode extends Subscriber {
         this.senderInetAddress = senderInetAddress;
         this.senderPort = senderPort;
         if (message != null) {
+            System.err.print("BEFORE PRINTING -- GOT MESSAGE FROM {" + message.getSenderId() + "} WITH TYPE " + message.getTypeCase() + " | ");
+            gameModel.makePlayerTimestamp(message.getSenderId());
             switch (message.getTypeCase()) {
                 case ACK -> handleAckMessage(message);
                 case JOIN -> handleJoinMessage(message);
@@ -307,7 +320,6 @@ public class NetworkNode extends Subscriber {
                 case ROLE_CHANGE -> handleRoleChangeMessage(message);
                 default -> sendAckMessageTo(message);
             }
-            gameModel.makePlayerTimestamp(message.getSenderId());
         }
     }
 
@@ -319,7 +331,8 @@ public class NetworkNode extends Subscriber {
             if (message.getTypeCase().equals(announcementMessageIndicator)) {
                 handleAnnouncementMessage(message);
             }
-            gameModel.makePlayerTimestamp(message.getSenderId());
+//            System.err.print("BEFORE PRINTING -- GOT MESSAGE AFTER HANDLE MULTICAST FROM {" + message.getSenderId() + "} WITH TYPE " + message.getTypeCase() + " | ");
+//            gameModel.makePlayerTimestamp(message.getSenderId());
         }
     }
 
@@ -369,7 +382,6 @@ public class NetworkNode extends Subscriber {
                 nodeRole = DEPUTY_ROLE;
             }
             if (changeRoleMessage.getRoleChange().getReceiverRole().equals(MASTER_ROLE)) {
-                nodeRole = MASTER_ROLE;
                 gameModel.rebuiltGameModel(nodeId.hashCode());
             }
         }
@@ -400,6 +412,19 @@ public class NetworkNode extends Subscriber {
                     message.getSenderId() == correspondingMessage.getReceiverPlayer().getId()) {
                 DebugPrinter.printWithSpecifiedDateAndName(this.getClass().getSimpleName(),
                         "got ack for message\n{\n" + correspondingMessage.getMessage() + "}\n");
+//                if (correspondingMessage.getMessage().getRoleChange().hasReceiverRole()) {
+//                    if (correspondingMessage.getMessage().getRoleChange().getReceiverRole().equals(DEPUTY_ROLE)) {
+//                        for (int i = 0; i < gameModel.getSessionGamePlayers().getPlayersCount(); ++i) {
+//                            var player = gameModel.getSessionGamePlayers().getPlayers(i);
+//                            if (correspondingMessage.getMessage().getReceiverId() == player.getId()) {
+//                                var updatedPlayer = player.toBuilder().setRole(DEPUTY_ROLE).build();
+//                                gameModel.setSessionGamePlayers(
+//                                        gameModel.getSessionGamePlayers().toBuilder().setPlayers(i, updatedPlayer).build()
+//                                );
+//                            }
+//                        }
+//                    }
+//                }
                 requiredSendingMessages.remove(correspondingMessage);
             }
         }
@@ -408,11 +433,12 @@ public class NetworkNode extends Subscriber {
     private void handleJoinMessage(SnakesProto.GameMessage message) {
         var newPlayer = this.getPlayerImageByMessage(message);
         this.sendAckMessageTo(message);
-        gameModel.addNewPlayerToModel(newPlayer);
         if (deputyPlayer == null) {
             deputyPlayer = newPlayer;
+            newPlayer = newPlayer.toBuilder().setRole(DEPUTY_ROLE).build();
             this.sendRoleChangeMessage(newPlayer, MASTER_ROLE, DEPUTY_ROLE);
         }
+        gameModel.addNewPlayerToModel(newPlayer);
     }
 
     public void sendAckMessageTo(SnakesProto.GameMessage message) {
@@ -496,7 +522,6 @@ public class NetworkNode extends Subscriber {
     }
 
     public void sendChangeSnakeDirection(SnakesProto.Direction chosenDirection) {
-        System.out.println("ROLE: " + nodeRole.toString());
         if (nodeRole.equals(MASTER_ROLE)) {
             int sessionMasterId = gameModel.getSessionMasterId();
             long masterDirectionChangesNumber = gameModel.getDirectionChangesNumbersByPlayer().get(sessionMasterId);
@@ -546,7 +571,7 @@ public class NetworkNode extends Subscriber {
         this.masterPlayer = GamePlayersMaker.buildGamePlayerImage(
                 nodeId.hashCode(),
                 nodeName,
-                0,
+                myPort,
                 myInetAddress.getHostAddress(),
                 MASTER_ROLE);
         this.nodeRole = MASTER_ROLE;

@@ -17,26 +17,9 @@ import java.util.concurrent.ConcurrentHashMap;
 public class GameMainMenu extends JPanel {
     private final JPanel availableGamesPanel = new JPanel();
     private final JPanel scoresPanel = new JPanel();
-    private final JButton launchNewGameButton = new JButton("Start new game");
-    private final JButton updateOnlineGamesButton = new JButton("Update online games");
 
     private static final Font LABELS_DEFAULT_FONT = new Font("Veranda", Font.BOLD, 20);
     private static final Font UPDATING_INFOS_FONT = new Font("Veranda", Font.BOLD, 16);
-
-    private final JLabel menuLabel = new JLabel() {{
-        setText("MAIN MENU");
-        setFont(LABELS_DEFAULT_FONT);
-    }};
-
-    private final JLabel currentGameLabel = new JLabel() {{
-        setText("CURRENT GAME");
-        setFont(LABELS_DEFAULT_FONT);
-    }};
-
-    private final JLabel onlineGamesLabel = new JLabel() {{
-        setText("ONLINE GAMES");
-        setFont(LABELS_DEFAULT_FONT);
-    }};
 
     private final GameController gameController;
     private final GameModel gameModel;
@@ -52,10 +35,24 @@ public class GameMainMenu extends JPanel {
 
         SpringLayout springLayout = new SpringLayout();
         this.setLayout(springLayout);
+        JLabel menuLabel = new JLabel() {{
+            setText("MAIN MENU");
+            setFont(LABELS_DEFAULT_FONT);
+        }};
         this.add(menuLabel);
+        JLabel currentGameLabel = new JLabel() {{
+            setText("CURRENT GAME");
+            setFont(LABELS_DEFAULT_FONT);
+        }};
         this.add(currentGameLabel);
+        JLabel onlineGamesLabel = new JLabel() {{
+            setText("ONLINE GAMES");
+            setFont(LABELS_DEFAULT_FONT);
+        }};
         this.add(onlineGamesLabel);
+        JButton launchNewGameButton = new JButton("Start new game");
         this.add(launchNewGameButton);
+        JButton updateOnlineGamesButton = new JButton("Update online games");
         this.add(updateOnlineGamesButton);
         this.add(scoresPanel);
         this.add(availableGamesPanel);
@@ -79,7 +76,7 @@ public class GameMainMenu extends JPanel {
         springLayout.putConstraint(SpringLayout.WEST, currentGameLabel, LAYOUT_SIDE_PAD - 18, SpringLayout.WEST, this);
 
         springLayout.putConstraint(SpringLayout.NORTH, scoresPanel, LAYOUT_NORTH_PAD, SpringLayout.NORTH, currentGameLabel);
-        springLayout.putConstraint(SpringLayout.WEST, scoresPanel, LAYOUT_SIDE_PAD - 150, SpringLayout.WEST, this);
+        springLayout.putConstraint(SpringLayout.WEST, scoresPanel, LAYOUT_SIDE_PAD - 200, SpringLayout.WEST, this);
 
         springLayout.putConstraint(SpringLayout.NORTH, onlineGamesLabel, 10 * LAYOUT_NORTH_PAD, SpringLayout.NORTH, scoresPanel);
         springLayout.putConstraint(SpringLayout.WEST, onlineGamesLabel, LAYOUT_SIDE_PAD - 10, SpringLayout.WEST, this);
@@ -94,8 +91,9 @@ public class GameMainMenu extends JPanel {
             JLabel playerInfoLabel = new JLabel();
             playerInfoLabel.setFont(UPDATING_INFOS_FONT);
             if (gameModel.getSnakesAllCoordinatesByPlayer().containsKey(player.getId())) {
-                playerInfoLabel.setText("Player {" + player.getName() + "} with ID {" + player.getId() + "} has score: " +
-                        gameModel.getSnakesAllCoordinatesByPlayer().get(player.getId()).size());
+                int realScore = gameModel.getSnakesAllCoordinatesByPlayer().get(player.getId()).size() - 2;
+                playerInfoLabel.setText("Player {" + player.getName() + "} with ID {" + player.getId() + "} " +
+                        "has score: " + realScore + " {" + player.getRole() + "}");
             } else {
                 playerInfoLabel.setText("Player {" + player.getName() + "} with ID {" + player.getId() + "} has score: 0" +
                         "{VIEWER}");
@@ -119,7 +117,6 @@ public class GameMainMenu extends JPanel {
             logOutButton.addActionListener(event ->
                     gameController.exitFromGame()
             );
-
             var masterPlayer = GamePlayersMaker.getMasterPlayerFromList(availableGame.getKey().getMessage().getAnnouncement().getPlayers());
             assert masterPlayer != null;
             JLabel infoLabel = new JLabel();

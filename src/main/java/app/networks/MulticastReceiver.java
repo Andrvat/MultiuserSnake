@@ -31,7 +31,6 @@ public class MulticastReceiver extends Thread {
 
                     gameMessage = SnakesProto.GameMessage.parseFrom(messageBytes);
                     networkNode.handleReceivedMulticastMessage(gameMessage, receivedPacket.getAddress(), receivedPacket.getPort());
-                    DebugPrinter.printWithSpecifiedDateAndName(this.getClass().getSimpleName(), gameMessage.getTypeCase().toString());
                 } catch (SocketTimeoutException ignored) {
                 }
             }

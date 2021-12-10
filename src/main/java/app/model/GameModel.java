@@ -28,7 +28,6 @@ public class GameModel extends Publisher {
         this.changeGameStateBy(this.getDefaultGameConfig());
     }
 
-    // TODO: если убрать sets, то новый игрок не может начать играть по кнопке Войти.
     private SnakesProto.GameConfig getDefaultGameConfig() {
         return SnakesProto.GameConfig.newBuilder()
                 .setWidth(INITIAL_GAME_FIELD_SIZE)
@@ -54,6 +53,10 @@ public class GameModel extends Publisher {
 
     public SnakesProto.GamePlayers getSessionGamePlayers() {
         return sessionGamePlayers;
+    }
+
+    public void setSessionGamePlayers(SnakesProto.GamePlayers sessionGamePlayers) {
+        this.sessionGamePlayers = sessionGamePlayers;
     }
 
     public HashMap<Integer, Long> getDirectionChangesNumbersByPlayer() {
@@ -540,6 +543,7 @@ public class GameModel extends Publisher {
 
     public void makePlayerTimestamp(int playerId) {
         activitiesTimestampsByPlayer.put(playerId, Instant.now());
+        System.err.println(activitiesTimestampsByPlayer);
     }
 
     public void rebuiltGameModel(int playerId) {
@@ -556,6 +560,7 @@ public class GameModel extends Publisher {
         }
         for (var player : gameState.getPlayers().getPlayersList()) {
             directionChangesNumbersByPlayer.put(player.getId(), ZERO_DIRECTION_CHANGES);
+            System.err.println("I AM HERE");
             activitiesTimestampsByPlayer.put(player.getId(), Instant.now());
         }
     }
@@ -605,5 +610,18 @@ public class GameModel extends Publisher {
                 return true;
         }
         return false;
+    }
+
+    @Override
+    public String toString() {
+        return "\nGameModel{" +
+                "\ndirectionChangesNumbersByPlayer=" + directionChangesNumbersByPlayer +
+                "\nactivitiesTimestampsByPlayer=" + activitiesTimestampsByPlayer +
+                "\nsnakesAllCoordinatesByPlayer=" + snakesAllCoordinatesByPlayer +
+                "\nsnakesDirectionsByPlayer=" + snakesDirectionsByPlayer +
+                "\nsessionGamePlayers=" + sessionGamePlayers +
+                "\ngameState=" + gameState +
+                "\nsessionMasterId=" + sessionMasterId +
+                "\n}";
     }
 }
