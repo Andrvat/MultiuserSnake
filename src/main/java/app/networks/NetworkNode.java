@@ -220,19 +220,21 @@ public class NetworkNode extends Subscriber {
         for (var activityTimestamp : gameModel.getActivitiesTimestampsByPlayer().entrySet()) {
             if (currentTimeMs - activityTimestamp.getValue().toEpochMilli() >
                     gameModel.getGameState().getConfig().getNodeTimeoutMs()) {
-                if (MASTER_ROLE.equals(gameModel.getPlayerById(activityTimestamp.getKey()).getRole())) {
-                    if (nodeRole.equals(DEPUTY_ROLE)) {
-                        nodeRole = MASTER_ROLE;
-                        gameModel.rebuiltGameModel(nodeId.hashCode());
-                        for (var player : gameModel.getGameState().getPlayers().getPlayersList()) {
-                            this.sendRoleChangeMessage(player, MASTER_ROLE, NORMAL_ROLE);
+                if (gameModel.getPlayerById(activityTimestamp.getKey()) != null) {
+                    if (MASTER_ROLE.equals(gameModel.getPlayerById(activityTimestamp.getKey()).getRole())) {
+                        if (nodeRole.equals(DEPUTY_ROLE)) {
+                            nodeRole = MASTER_ROLE;
+                            gameModel.rebuiltGameModel(nodeId.hashCode());
+                            for (var player : gameModel.getGameState().getPlayers().getPlayersList()) {
+                                this.sendRoleChangeMessage(player, MASTER_ROLE, NORMAL_ROLE);
+                            }
+                            deputyPlayer = null;
+                        } else if (nodeRole.equals(NORMAL_ROLE)) {
+                            masterPlayer = GamePlayersMaker.getDeputyPlayerFromList(gameModel.getGameState().getPlayers());
                         }
-                        deputyPlayer = null;
-                    } else if (nodeRole.equals(NORMAL_ROLE)) {
-                        masterPlayer = GamePlayersMaker.getDeputyPlayerFromList(gameModel.getGameState().getPlayers());
                     }
+                    this.sendPingMessage(gameModel.getPlayerById(activityTimestamp.getKey()));
                 }
-                this.sendPingMessage(gameModel.getPlayerById(activityTimestamp.getKey()));
             }
         }
         lastSentMessageTimestamp = getEpochMillisBySystemClockInstant();

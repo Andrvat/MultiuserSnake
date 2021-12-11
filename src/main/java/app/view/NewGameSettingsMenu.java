@@ -290,7 +290,7 @@ public class NewGameSettingsMenu extends JFrame {
             gameController.launchNewGame(inputWidth, inputHeight,
                     inputFoodStatic, inputFoodPerPlayer,
                     inputStateDelay, inputFoodProb,
-                    inputPingDelay, inputNodeTimeout + inputStateDelay);
+                    inputPingDelay, 2 * inputNodeTimeout + inputStateDelay);
             this.dispatchEvent(new WindowEvent(this, WindowEvent.WINDOW_CLOSING));
         });
     }

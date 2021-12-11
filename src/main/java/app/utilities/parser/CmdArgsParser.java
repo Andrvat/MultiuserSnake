@@ -1,12 +1,13 @@
 package app.utilities.parser;
 
+import com.github.javafaker.Faker;
 import me.alexpanov.net.FreePortFinder;
 import org.apache.commons.cli.*;
 
 import java.util.*;
 
 public class CmdArgsParser {
-    private static final String DEFAULT_PLAYER_NAME = "First player";
+    private static final String DEFAULT_PLAYER_NAME = new Faker().name().firstName();
     private static final String DEFAULT_HOST_ADDRESS = "0.0.0.0";
 
     private final Options cmdOptions = new Options();

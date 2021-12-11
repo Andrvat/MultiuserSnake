@@ -199,7 +199,7 @@ public class GameModel extends Publisher {
         for (int currentX = leftCornerX; currentX < rightCornerX; currentX++) {
             for (int currentY = leftCornerY; currentY < rightCornerY; currentY++) {
                 for (var snake : gameState.getSnakesList()) {
-                    for (var snakeCoordinates : snake.getPointsList()) {
+                    for (var snakeCoordinates : getSnakeAllCoordinates(snake)) {
                         if (convertToFieldCoordinate(currentX, currentY).equals(snakeCoordinates)) {
                             return false;
                         }
@@ -233,7 +233,7 @@ public class GameModel extends Publisher {
                 var trackedCoordinate = convertToFieldCoordinate(i, j);
                 boolean isTrackedCoordinateFree = true;
                 for (var snake : gameState.getSnakesList()) {
-                    for (var snakeCoordinate : snake.getPointsList()) {
+                    for (var snakeCoordinate : getSnakeAllCoordinates(snake)) {
                         if (trackedCoordinate.equals(snakeCoordinate)) {
                             isTrackedCoordinateFree = false;
                             break;
