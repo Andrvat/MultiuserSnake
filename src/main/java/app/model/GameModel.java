@@ -8,8 +8,6 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static java.lang.Math.abs;
-
 public class GameModel extends Publisher {
     private static final int INITIAL_GAME_FIELD_SIZE = 20;
     private static final int INITIAL_STATE_ORDER = 0;
@@ -171,7 +169,6 @@ public class GameModel extends Publisher {
         return snakeBuilder.build();
     }
 
-    // TODO: магические константы
     private LinkedList<SnakesProto.GameState.Coord> getEmptyPlaceForSnake() {
         final int yOffset = 4;
         Random numbersGenerator = new Random();
@@ -189,7 +186,7 @@ public class GameModel extends Publisher {
         if (!isThereFreeCoordinates) {
             return null;
         }
-        var headCoordinates = convertToFieldCoordinate(randomX + 2, randomY + 2);
+        var headCoordinates = convertToFieldCoordinate(randomX, randomY);
         var offsetFromHead = convertToFieldCoordinate(0, 1);
         return new LinkedList<>(List.of(headCoordinates, offsetFromHead));
     }
