@@ -3,6 +3,7 @@ package app.view;
 import app.model.GameModel;
 import app.controller.GameController;
 import app.networks.CommunicationMessage;
+import app.utilities.DebugPrinter;
 import app.utilities.GamePlayersMaker;
 import proto.SnakesProto;
 
@@ -114,8 +115,11 @@ public class GameMainMenu extends JPanel {
             );
 
             JButton logOutButton = new JButton("Log out");
-            logOutButton.addActionListener(event ->
-                    gameController.exitFromGame()
+            logOutButton.addActionListener(event -> {
+                        DebugPrinter.printWithSpecifiedDateAndName(this.getClass().getSimpleName(),
+                                "Log out pressed");
+                        gameController.exitFromGame();
+                    }
             );
             var masterPlayer = GamePlayersMaker.getMasterPlayerFromList(availableGame.getKey().getMessage().getAnnouncement().getPlayers());
             assert masterPlayer != null;

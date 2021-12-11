@@ -144,16 +144,12 @@ public class NetworkNode extends Subscriber {
                         messageBytes.length,
                         InetAddress.getByName(correspondingMessage.getReceiverPlayer().getIpAddress()),
                         correspondingMessage.getReceiverPlayer().getPort());
-                if (correspondingMessage.getMessage().getTypeCase()
-                        .equals(SnakesProto.GameMessage.TypeCase.STATE) && hasTimePassed) {
-                    datagramSocket.send(sendingDatagramPacket);
-                    requiredSendingMessages.remove(correspondingMessage);
-                } else {
-                    datagramSocket.send(sendingDatagramPacket);
-                    if (!correspondingMessage.getMessage().getTypeCase().equals(SnakesProto.GameMessage.TypeCase.ACK)) {
-                        requiredConfirmationMessages.put(correspondingMessage, Instant.now());
-                    }
-                    requiredSendingMessages.remove(correspondingMessage);
+                DebugPrinter.printWithSpecifiedDateAndName(this.getClass().getSimpleName(),
+                        "Send message in process | " + correspondingMessage.getMessage().getTypeCase());
+                datagramSocket.send(sendingDatagramPacket);
+                requiredSendingMessages.remove(correspondingMessage);
+                if (!correspondingMessage.getMessage().getTypeCase().equals(SnakesProto.GameMessage.TypeCase.ACK)) {
+                    requiredConfirmationMessages.put(correspondingMessage, Instant.now());
                 }
             } catch (Exception exception) {
                 exception.printStackTrace();
@@ -193,6 +189,8 @@ public class NetworkNode extends Subscriber {
                         messageBytes.length,
                         InetAddress.getByName(correspondingMessage.getReceiverPlayer().getIpAddress()),
                         correspondingMessage.getReceiverPlayer().getPort());
+                DebugPrinter.printWithSpecifiedDateAndName(this.getClass().getSimpleName(),
+                        "Send message in sending all | " + correspondingMessage.getMessage().getTypeCase());
                 datagramSocket.send(sendingDatagramPacket);
             } catch (Exception exception) {
                 exception.printStackTrace();
@@ -366,7 +364,8 @@ public class NetworkNode extends Subscriber {
             if (changeRoleMessage.getRoleChange().getReceiverRole().equals(DEPUTY_ROLE)) {
                 nodeRole = DEPUTY_ROLE;
             }
-            if (changeRoleMessage.getRoleChange().getReceiverRole().equals(MASTER_ROLE)) {
+            if (changeRoleMessage.getRoleChange().getReceiverRole().equals(MASTER_ROLE) &&
+                    !MASTER_ROLE.equals(nodeRole)) {
                 gameModel.rebuiltGameModel(nodeId.hashCode());
             }
         }
