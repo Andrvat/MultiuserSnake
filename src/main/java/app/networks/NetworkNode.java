@@ -73,7 +73,6 @@ public class NetworkNode extends Subscriber {
         multicastSocket = new MulticastSocket(MULTICAST_PORT);
         datagramSocket = new DatagramSocket(myPort, myInetAddress);
         connectMulticastSocketToGroup();
-        //setTimeoutsForSockets();
     }
 
     private void connectMulticastSocketToGroup() throws IOException {
@@ -115,6 +114,20 @@ public class NetworkNode extends Subscriber {
                 lastAnnouncementTimestamp = Instant.now().toEpochMilli();
             }
         }
+        updateAnnouncementsTimestampsByCurrentTime();
+    }
+
+    private void updateAnnouncementsTimestampsByCurrentTime() {
+        int lastAnnouncementsSize = announcementsTimestamps.size();
+        for (var timestamp : announcementsTimestamps.entrySet()) {
+            if (getEpochMillisBySystemClockInstant() - timestamp.getValue().toEpochMilli() >
+                    10 * ANNOUNCEMENT_MESSAGE_PERIOD_IN_MILLIS) {
+                announcementsTimestamps.remove(timestamp.getKey());
+            }
+        }
+        if (announcementsTimestamps.size() != lastAnnouncementsSize) {
+            this.updateState();
+        }
     }
 
     private void processGameStep() {
@@ -147,6 +160,7 @@ public class NetworkNode extends Subscriber {
                 DebugPrinter.printWithSpecifiedDateAndName(this.getClass().getSimpleName(),
                         "Send message in process | " +
                                 correspondingMessage.getMessage().getTypeCase() +
+                                " (has ping " + correspondingMessage.getMessage().hasPing() + ") " +
                                 " to " + correspondingMessage.getMessage().getReceiverId() +
                                 " from " + correspondingMessage.getMessage().getSenderId());
                 datagramSocket.send(sendingDatagramPacket);
@@ -195,6 +209,7 @@ public class NetworkNode extends Subscriber {
                 DebugPrinter.printWithSpecifiedDateAndName(this.getClass().getSimpleName(),
                         "Send message in sending all | " +
                                 correspondingMessage.getMessage().getTypeCase() +
+                                " (has ping " + correspondingMessage.getMessage().hasPing() + ") " +
                                 " to " + correspondingMessage.getMessage().getReceiverId() +
                                 " from " + correspondingMessage.getMessage().getSenderId());
                 datagramSocket.send(sendingDatagramPacket);
@@ -206,7 +221,6 @@ public class NetworkNode extends Subscriber {
 
     private void processPlayersActivitiesByPings() {
         long currentTimeMs = getEpochMillisBySystemClockInstant();
-        System.err.println(gameModel.getActivitiesTimestampsByPlayer());
         for (var activityTimestamp : gameModel.getActivitiesTimestampsByPlayer().entrySet()) {
             if (currentTimeMs - activityTimestamp.getValue().toEpochMilli() >
                     gameModel.getGameState().getConfig().getNodeTimeoutMs()) {
@@ -229,6 +243,18 @@ public class NetworkNode extends Subscriber {
                             masterPlayer = GamePlayersMaker.getMasterPlayerFromList(gameModel.getGameState().getPlayers());
                         } else if (nodeRole.equals(NORMAL_ROLE)) {
                             masterPlayer = GamePlayersMaker.getDeputyPlayerFromList(gameModel.getGameState().getPlayers());
+                        }
+                    }
+                    for (var timestamp : requiredConfirmationMessages.entrySet()) {
+                        var message = timestamp.getKey();
+                        if (message.getMessage().getReceiverId() == activityTimestamp.getKey()) {
+                            if (getEpochMillisBySystemClockInstant() - timestamp.getValue().toEpochMilli() >
+                                    gameModel.getGameState().getConfig().getNodeTimeoutMs()) {
+                                gameModel.changePlayerGameStatus(activityTimestamp.getKey(), VIEWER_ROLE, SnakesProto.GameState.Snake.SnakeState.ZOMBIE);
+                                if (deputyPlayer != null && deputyPlayer.getId() == activityTimestamp.getKey()) {
+                                    deputyPlayer = null;
+                                }
+                            }
                         }
                     }
                     this.sendPingMessage(gameModel.getPlayerById(activityTimestamp.getKey()));
@@ -355,6 +381,7 @@ public class NetworkNode extends Subscriber {
             }
             announcementsTimestamps.put(communicationMessage, Instant.now());
         }
+        System.err.println(announcementsTimestamps);
     }
 
     private void handleStateMessage(SnakesProto.GameMessage stateMessage) {
@@ -411,7 +438,7 @@ public class NetworkNode extends Subscriber {
                     message.getSenderId() == correspondingMessage.getReceiverPlayer().getId()) {
                 DebugPrinter.printWithSpecifiedDateAndName(this.getClass().getSimpleName(),
                         "got ack for message\n{\n" + correspondingMessage.getMessage() + "}\n");
-                requiredSendingMessages.remove(correspondingMessage);
+                requiredConfirmationMessages.remove(correspondingMessage);
             }
         }
     }
