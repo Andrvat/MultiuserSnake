@@ -214,14 +214,19 @@ public class NetworkNode extends Subscriber {
                     if (MASTER_ROLE.equals(gameModel.getPlayerById(activityTimestamp.getKey()).getRole())) {
                         if (nodeRole.equals(DEPUTY_ROLE)) {
                             nodeRole = MASTER_ROLE;
+                            deputyPlayer = null;
                             gameModel.rebuiltGameModel(nodeId.hashCode());
                             for (var player : gameModel.getGameState().getPlayers().getPlayersList()) {
                                 if (player.getId() != nodeId.hashCode() && !VIEWER_ROLE.equals(player.getRole())) {
-                                    this.sendRoleChangeMessage(player, MASTER_ROLE, NORMAL_ROLE);
+                                    if (deputyPlayer == null) {
+                                        this.sendRoleChangeMessage(player, MASTER_ROLE, DEPUTY_ROLE);
+                                        gameModel.changePlayerGameStatus(player.getId(), DEPUTY_ROLE, SnakesProto.GameState.Snake.SnakeState.ALIVE);
+                                    } else {
+                                        this.sendRoleChangeMessage(player, MASTER_ROLE, NORMAL_ROLE);
+                                    }
                                 }
                             }
                             masterPlayer = GamePlayersMaker.getMasterPlayerFromList(gameModel.getGameState().getPlayers());
-                            deputyPlayer = null;
                         } else if (nodeRole.equals(NORMAL_ROLE)) {
                             masterPlayer = GamePlayersMaker.getDeputyPlayerFromList(gameModel.getGameState().getPlayers());
                         }

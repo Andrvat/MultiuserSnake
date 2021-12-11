@@ -570,7 +570,6 @@ public class GameModel extends Publisher {
             directionChangesNumbersByPlayer.put(player.getId(), ZERO_DIRECTION_CHANGES);
             activitiesTimestampsByPlayer.put(player.getId(), Instant.now());
         }
-        System.err.println("I AM HERE IN REBUILDING");
         this.informAllSubscribers();
     }
 
