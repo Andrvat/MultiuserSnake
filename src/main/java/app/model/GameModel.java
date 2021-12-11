@@ -16,10 +16,10 @@ public class GameModel extends Publisher {
     private static final long ZERO_DIRECTION_CHANGES = 0L;
     private static final int SNAKE_HEAD_INDEX = 0;
 
-    private HashMap<Integer, Long> directionChangesNumbersByPlayer = new HashMap<>();
+    private ConcurrentHashMap<Integer, Long> directionChangesNumbersByPlayer = new ConcurrentHashMap<>();
     private ConcurrentHashMap<Integer, Instant> activitiesTimestampsByPlayer = new ConcurrentHashMap<>();
-    private HashMap<Integer, LinkedList<SnakesProto.GameState.Coord>> snakesAllCoordinatesByPlayer = new HashMap<>();
-    private HashMap<Integer, SnakesProto.Direction> snakesDirectionsByPlayer = new HashMap<>();
+    private ConcurrentHashMap<Integer, LinkedList<SnakesProto.GameState.Coord>> snakesAllCoordinatesByPlayer = new ConcurrentHashMap<>();
+    private ConcurrentHashMap<Integer, SnakesProto.Direction> snakesDirectionsByPlayer = new ConcurrentHashMap<>();
     private SnakesProto.GamePlayers sessionGamePlayers = SnakesProto.GamePlayers.newBuilder().build();
     private SnakesProto.GameState gameState;
     private int sessionMasterId;
@@ -59,7 +59,7 @@ public class GameModel extends Publisher {
         this.sessionGamePlayers = sessionGamePlayers;
     }
 
-    public HashMap<Integer, Long> getDirectionChangesNumbersByPlayer() {
+    public ConcurrentHashMap<Integer, Long> getDirectionChangesNumbersByPlayer() {
         return directionChangesNumbersByPlayer;
     }
 
@@ -79,7 +79,7 @@ public class GameModel extends Publisher {
         return gameState;
     }
 
-    public HashMap<Integer, LinkedList<SnakesProto.GameState.Coord>> getSnakesAllCoordinatesByPlayer() {
+    public ConcurrentHashMap<Integer, LinkedList<SnakesProto.GameState.Coord>> getSnakesAllCoordinatesByPlayer() {
         return snakesAllCoordinatesByPlayer;
     }
 
@@ -90,9 +90,9 @@ public class GameModel extends Publisher {
     public void launchNewGameAsMaster(SnakesProto.GameConfig gameConfig, String playerName,
                                       int playerId, int playerPort) {
         this.sessionGamePlayers = SnakesProto.GamePlayers.newBuilder().build();
-        this.snakesAllCoordinatesByPlayer = new HashMap<>();
-        this.snakesDirectionsByPlayer = new HashMap<>();
-        this.directionChangesNumbersByPlayer = new HashMap<>();
+        this.snakesAllCoordinatesByPlayer = new ConcurrentHashMap<>();
+        this.snakesDirectionsByPlayer = new ConcurrentHashMap<>();
+        this.directionChangesNumbersByPlayer = new ConcurrentHashMap<>();
         this.activitiesTimestampsByPlayer = new ConcurrentHashMap<>();
         this.sessionMasterId = playerId;
         this.changeGameStateBy(gameConfig);
@@ -293,6 +293,9 @@ public class GameModel extends Publisher {
 
     public SnakesProto.GameState.Snake makeSnakeStep(SnakesProto.GameState.Snake snake) {
         var snakeNextDirection = snakesDirectionsByPlayer.get(snake.getPlayerId());
+        if (snakeNextDirection == null) {
+            System.err.println("AAAAA");
+        }
         snake = snake.toBuilder().setHeadDirection(snakeNextDirection).build();
         var snakeCoordinatesAfterStep = changeSnakeCoordinatesAccordingToStep(
                 snakesAllCoordinatesByPlayer.get(snake.getPlayerId()), snake.getHeadDirection());
@@ -549,22 +552,26 @@ public class GameModel extends Publisher {
     }
 
     public void rebuiltGameModel(int playerId) {
-        snakesAllCoordinatesByPlayer = new HashMap<>();
-        snakesDirectionsByPlayer = new HashMap<>();
-        directionChangesNumbersByPlayer = new HashMap<>();
+        snakesAllCoordinatesByPlayer = new ConcurrentHashMap<>();
+        snakesDirectionsByPlayer = new ConcurrentHashMap<>();
+        directionChangesNumbersByPlayer = new ConcurrentHashMap<>();
         activitiesTimestampsByPlayer = new ConcurrentHashMap<>();
-
-        sessionGamePlayers = gameState.getPlayers();
+        this.changePlayerGameStatus(sessionMasterId, SnakesProto.NodeRole.VIEWER, SnakesProto.GameState.Snake.SnakeState.ZOMBIE);
         this.changePlayerGameStatus(playerId, SnakesProto.NodeRole.MASTER, SnakesProto.GameState.Snake.SnakeState.ALIVE);
 
+        this.sessionMasterId = playerId;
+
+        sessionGamePlayers = gameState.getPlayers();
         for (var snake : gameState.getSnakesList()) {
             snakesAllCoordinatesByPlayer.put(snake.getPlayerId(), getSnakeAllCoordinates(snake));
+            snakesDirectionsByPlayer.put(snake.getPlayerId(), snake.getHeadDirection());
         }
         for (var player : gameState.getPlayers().getPlayersList()) {
             directionChangesNumbersByPlayer.put(player.getId(), ZERO_DIRECTION_CHANGES);
-            System.err.println("I AM HERE");
             activitiesTimestampsByPlayer.put(player.getId(), Instant.now());
         }
+        System.err.println("I AM HERE IN REBUILDING");
+        this.informAllSubscribers();
     }
 
     public void changePlayerGameStatus(int playerId, SnakesProto.NodeRole playerRole,
@@ -589,11 +596,12 @@ public class GameModel extends Publisher {
 
         SnakesProto.GameState.Builder newGameStateBuilder = gameState.toBuilder();
         newGameStateBuilder.clearSnakes();
+        newGameStateBuilder.clearPlayers();
+        newGameStateBuilder.setPlayers(overwritingPlayers.build());
         for (var snake : overwritingSnakes) {
             newGameStateBuilder.addSnakes(snake);
         }
         this.gameState = newGameStateBuilder.build();
-        this.gameState = gameState.toBuilder().setPlayers(overwritingPlayers).build();
     }
 
     public SnakesProto.GamePlayer getPlayerById(int playerId) {

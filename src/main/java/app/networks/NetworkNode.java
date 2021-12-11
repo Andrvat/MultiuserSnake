@@ -145,7 +145,10 @@ public class NetworkNode extends Subscriber {
                         InetAddress.getByName(correspondingMessage.getReceiverPlayer().getIpAddress()),
                         correspondingMessage.getReceiverPlayer().getPort());
                 DebugPrinter.printWithSpecifiedDateAndName(this.getClass().getSimpleName(),
-                        "Send message in process | " + correspondingMessage.getMessage().getTypeCase());
+                        "Send message in process | " +
+                                correspondingMessage.getMessage().getTypeCase() +
+                                " to " + correspondingMessage.getMessage().getReceiverId() +
+                                " from " + correspondingMessage.getMessage().getSenderId());
                 datagramSocket.send(sendingDatagramPacket);
                 requiredSendingMessages.remove(correspondingMessage);
                 if (!correspondingMessage.getMessage().getTypeCase().equals(SnakesProto.GameMessage.TypeCase.ACK)) {
@@ -190,7 +193,10 @@ public class NetworkNode extends Subscriber {
                         InetAddress.getByName(correspondingMessage.getReceiverPlayer().getIpAddress()),
                         correspondingMessage.getReceiverPlayer().getPort());
                 DebugPrinter.printWithSpecifiedDateAndName(this.getClass().getSimpleName(),
-                        "Send message in sending all | " + correspondingMessage.getMessage().getTypeCase());
+                        "Send message in sending all | " +
+                                correspondingMessage.getMessage().getTypeCase() +
+                                " to " + correspondingMessage.getMessage().getReceiverId() +
+                                " from " + correspondingMessage.getMessage().getSenderId());
                 datagramSocket.send(sendingDatagramPacket);
             } catch (Exception exception) {
                 exception.printStackTrace();
@@ -200,6 +206,7 @@ public class NetworkNode extends Subscriber {
 
     private void processPlayersActivitiesByPings() {
         long currentTimeMs = getEpochMillisBySystemClockInstant();
+        System.err.println(gameModel.getActivitiesTimestampsByPlayer());
         for (var activityTimestamp : gameModel.getActivitiesTimestampsByPlayer().entrySet()) {
             if (currentTimeMs - activityTimestamp.getValue().toEpochMilli() >
                     gameModel.getGameState().getConfig().getNodeTimeoutMs()) {
@@ -209,8 +216,11 @@ public class NetworkNode extends Subscriber {
                             nodeRole = MASTER_ROLE;
                             gameModel.rebuiltGameModel(nodeId.hashCode());
                             for (var player : gameModel.getGameState().getPlayers().getPlayersList()) {
-                                this.sendRoleChangeMessage(player, MASTER_ROLE, NORMAL_ROLE);
+                                if (player.getId() != nodeId.hashCode() && !VIEWER_ROLE.equals(player.getRole())) {
+                                    this.sendRoleChangeMessage(player, MASTER_ROLE, NORMAL_ROLE);
+                                }
                             }
+                            masterPlayer = GamePlayersMaker.getMasterPlayerFromList(gameModel.getGameState().getPlayers());
                             deputyPlayer = null;
                         } else if (nodeRole.equals(NORMAL_ROLE)) {
                             masterPlayer = GamePlayersMaker.getDeputyPlayerFromList(gameModel.getGameState().getPlayers());
