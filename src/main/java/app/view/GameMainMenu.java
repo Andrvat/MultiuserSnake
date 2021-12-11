@@ -96,7 +96,7 @@ public class GameMainMenu extends JPanel {
                         "has score: " + realScore + " {" + player.getRole() + "}");
             } else {
                 playerInfoLabel.setText("Player {" + player.getName() + "} with ID {" + player.getId() + "} has score: 0" +
-                        "{VIEWER}");
+                        " {VIEWER}");
             }
             scoresPanel.add(playerInfoLabel);
         }

@@ -33,7 +33,7 @@ public class NewGameSettingsMenu extends JFrame {
         put("defaultStateDelay", 1000);
         put("defaultFoodProb", 0.1f);
         put("defaultPingDelay", 100);
-        put("defaultNodeTimeout", 1800);
+        put("defaultNodeTimeout", 800);
 
         put("minWidth", 10);
         put("minHeight", 10);
@@ -290,7 +290,7 @@ public class NewGameSettingsMenu extends JFrame {
             gameController.launchNewGame(inputWidth, inputHeight,
                     inputFoodStatic, inputFoodPerPlayer,
                     inputStateDelay, inputFoodProb,
-                    inputPingDelay, inputNodeTimeout);
+                    inputPingDelay, inputNodeTimeout + inputStateDelay);
             this.dispatchEvent(new WindowEvent(this, WindowEvent.WINDOW_CLOSING));
         });
     }
