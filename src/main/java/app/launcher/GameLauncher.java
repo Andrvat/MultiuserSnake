@@ -2,6 +2,7 @@ package app.launcher;
 
 import app.networks.NetworkNode;
 import app.model.GameModel;
+import app.utilities.DebugPrinter;
 import app.utilities.parser.CmdArgsParser;
 import proto.SnakesProto;
 
@@ -13,6 +14,10 @@ public class GameLauncher {
         CmdArgsParser cmdArgsParser = new CmdArgsParser();
         try {
             cmdArgsParser.parseArguments(args);
+            DebugPrinter.printWithSpecifiedDateAndName(GameModel.class.getSimpleName(),
+                    "My port: " + cmdArgsParser.getHostPort());
+            DebugPrinter.printWithSpecifiedDateAndName(GameModel.class.getSimpleName(),
+                    "My address: " + cmdArgsParser.getHostInetAddress());
             GameModel gameModel = new GameModel();
             NetworkNode networkNode = NetworkNode.builder()
                     .nodeId(UUID.randomUUID())

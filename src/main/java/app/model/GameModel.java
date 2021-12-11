@@ -340,6 +340,9 @@ public class GameModel extends Publisher {
     private void generateFoodFromDeadSnake(int deadSnakeOwnerId) {
         var gameStateBuilder = gameState.toBuilder();
         for (var snakeCoordinate : snakesAllCoordinatesByPlayer.get(deadSnakeOwnerId)) {
+            if (isHeadCoordinate(snakeCoordinate, snakesAllCoordinatesByPlayer.get(deadSnakeOwnerId))) {
+                continue;
+            }
             int randomPoint = new Random().nextInt(100);
             if (randomPoint < gameState.getConfig().getDeadFoodProb() * 100) {
                 gameStateBuilder.addFoods(snakeCoordinate);
@@ -543,7 +546,6 @@ public class GameModel extends Publisher {
 
     public void makePlayerTimestamp(int playerId) {
         activitiesTimestampsByPlayer.put(playerId, Instant.now());
-        System.err.println(activitiesTimestampsByPlayer);
     }
 
     public void rebuiltGameModel(int playerId) {

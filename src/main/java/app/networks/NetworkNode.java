@@ -18,8 +18,6 @@ import proto.SnakesProto;
 public class NetworkNode extends Subscriber {
     private static final String MULTICAST_IP = "239.192.0.4";
     private static final int MULTICAST_PORT = 9192;
-    // TODO: падает exception при условии, что node timeout из конфига > эти значения
-    private static final int SOCKETS_TIMEOUT_IN_MILLIS = 500;
     private static final int ANNOUNCEMENT_MESSAGE_PERIOD_IN_MILLIS = 99;
 
     private final String nodeName;
@@ -82,11 +80,6 @@ public class NetworkNode extends Subscriber {
         multicastSocket.joinGroup(InetAddress.getByName(MULTICAST_IP));
     }
 
-    private void setTimeoutsForSockets() throws SocketException {
-        multicastSocket.setSoTimeout(SOCKETS_TIMEOUT_IN_MILLIS);
-        datagramSocket.setSoTimeout(SOCKETS_TIMEOUT_IN_MILLIS);
-    }
-
     public void startCommunicating() {
         UnicastReceiver unicastReceiver = UnicastReceiver.builder()
                 .datagramSocket(datagramSocket)
@@ -105,12 +98,6 @@ public class NetworkNode extends Subscriber {
         multicastReceiver.start();
 
         while (true) {
-//            new Thread(() -> {
-//                var masterPlayer = gameModel.getPlayerById(gameModel.getSessionMasterId());
-//                if (masterPlayer != null && moreTimeHasPassedThanPeriod(lastSentMessageTimestamp, gameModel.getGameConfig().getPingDelayMs())) {
-//                    this.sendPingMessage(masterPlayer);
-//                }
-//            }).start();
             communicate();
         }
     }
@@ -151,7 +138,6 @@ public class NetworkNode extends Subscriber {
                                     .setState(gameModel.getGameState()).build())
                             .build());
                 }
-                System.err.println("BEFORE SENDING IN 148 LINE: SENDER ID {" + correspondingMessage.getMessage().getSenderId() + "}");
                 var messageBytes = correspondingMessage.getMessage().toByteArray();
                 sendingDatagramPacket = new DatagramPacket(
                         messageBytes,
@@ -215,7 +201,6 @@ public class NetworkNode extends Subscriber {
     }
 
     private void processPlayersActivitiesByPings() {
-        //DebugPrinter.printWithSpecifiedDateAndName("processPlayersActivitiesByPings", gameModel.toString());
         long currentTimeMs = getEpochMillisBySystemClockInstant();
         for (var activityTimestamp : gameModel.getActivitiesTimestampsByPlayer().entrySet()) {
             if (currentTimeMs - activityTimestamp.getValue().toEpochMilli() >
@@ -312,7 +297,6 @@ public class NetworkNode extends Subscriber {
         this.senderInetAddress = senderInetAddress;
         this.senderPort = senderPort;
         if (message != null) {
-            System.err.print("BEFORE PRINTING -- GOT MESSAGE FROM {" + message.getSenderId() + "} WITH TYPE " + message.getTypeCase() + " | ");
             gameModel.makePlayerTimestamp(message.getSenderId());
             switch (message.getTypeCase()) {
                 case ACK -> handleAckMessage(message);
@@ -333,7 +317,6 @@ public class NetworkNode extends Subscriber {
             if (message.getTypeCase().equals(announcementMessageIndicator)) {
                 handleAnnouncementMessage(message);
             }
-//            System.err.print("BEFORE PRINTING -- GOT MESSAGE AFTER HANDLE MULTICAST FROM {" + message.getSenderId() + "} WITH TYPE " + message.getTypeCase() + " | ");
 //            gameModel.makePlayerTimestamp(message.getSenderId());
         }
     }
@@ -414,19 +397,6 @@ public class NetworkNode extends Subscriber {
                     message.getSenderId() == correspondingMessage.getReceiverPlayer().getId()) {
                 DebugPrinter.printWithSpecifiedDateAndName(this.getClass().getSimpleName(),
                         "got ack for message\n{\n" + correspondingMessage.getMessage() + "}\n");
-//                if (correspondingMessage.getMessage().getRoleChange().hasReceiverRole()) {
-//                    if (correspondingMessage.getMessage().getRoleChange().getReceiverRole().equals(DEPUTY_ROLE)) {
-//                        for (int i = 0; i < gameModel.getSessionGamePlayers().getPlayersCount(); ++i) {
-//                            var player = gameModel.getSessionGamePlayers().getPlayers(i);
-//                            if (correspondingMessage.getMessage().getReceiverId() == player.getId()) {
-//                                var updatedPlayer = player.toBuilder().setRole(DEPUTY_ROLE).build();
-//                                gameModel.setSessionGamePlayers(
-//                                        gameModel.getSessionGamePlayers().toBuilder().setPlayers(i, updatedPlayer).build()
-//                                );
-//                            }
-//                        }
-//                    }
-//                }
                 requiredSendingMessages.remove(correspondingMessage);
             }
         }
