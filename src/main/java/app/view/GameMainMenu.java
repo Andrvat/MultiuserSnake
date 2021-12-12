@@ -11,6 +11,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -105,8 +106,13 @@ public class GameMainMenu extends JPanel {
     }
 
     public void printAvailableGames(ConcurrentHashMap<CommunicationMessage, Instant> availableGames) {
+        var sortedAvailableGames = availableGames.entrySet().stream().sorted(
+                Comparator.comparing(game -> Objects.requireNonNull(
+                                GamePlayersMaker.getMasterPlayerFromList(game.getKey().getMessage().getAnnouncement().getPlayers()))
+                        .getName())
+        ).toList();
         availableGamesPanel.removeAll();
-        for (var availableGame : availableGames.entrySet()) {
+        for (var availableGame : sortedAvailableGames) {
             JPanel rowPanel = new JPanel(new BorderLayout());
 
             JButton logInButton = new JButton("Log in");
