@@ -8,11 +8,14 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class GameMainDisplay extends JFrame {
-    private static final String GAME_NAME = "ONLINE SNAKE";
+    private static final String GAME_NAME = "ONLINE SNAKE | " + LocalDateTime.now();
 
     private final GameField gameField;
     private final GameMainMenu gameMainMenu;

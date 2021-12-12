@@ -73,7 +73,7 @@ public class GameField extends JPanel {
     }
 
     private void paintBackground(Graphics graphics) {
-        graphics.setColor(Color.darkGray);
+        graphics.setColor(Color.gray);
         graphics.fillRect(0, 0, this.getWidth(), this.getHeight());
     }
 
@@ -86,7 +86,11 @@ public class GameField extends JPanel {
     private void paintSnake(SnakesProto.GameState.Snake snake, Graphics graphics) {
         var snakeAllCoordinates = gameModel.getSnakeAllCoordinates(snake);
         for (var coordinate : snakeAllCoordinates) {
-            graphics.setColor(Color.ORANGE);
+            if (snake.getPlayerId() == ownerFieldId) {
+                graphics.setColor(Color.ORANGE);
+            } else {
+                graphics.setColor(Color.CYAN);
+            }
             if (snake.getPlayerId() == ownerFieldId && coordinate.equals(snakeAllCoordinates.getFirst())) {
                 graphics.setColor(Color.YELLOW);
             }
