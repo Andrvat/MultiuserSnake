@@ -28,7 +28,8 @@ public class UnicastReceiver extends Thread {
                     messageBytes = new byte[receivedPacket.getLength()];
                     System.arraycopy(receivedPacket.getData(), 0, messageBytes, 0, receivedPacket.getLength());
                     gameMessage = SnakesProto.GameMessage.parseFrom(messageBytes);
-                    DebugPrinter.printWithSpecifiedDateAndName(this.getClass().getSimpleName(), gameMessage.getTypeCase().toString());
+                    DebugPrinter.printWithSpecifiedDateAndName(this.getClass().getSimpleName(),
+                            "Got new game message with type " + gameMessage.getTypeCase());
                     networkNode.handleReceivedUnicastMessage(gameMessage, receivedPacket.getAddress(), receivedPacket.getPort());
                 } catch (SocketTimeoutException ignored) {
                 }

@@ -1,0 +1,26 @@
+1. Если сначала игрок-мастер начал игру, потом к нему подключился игрок-deputy, то если master нажмет кнопку Log out
+(именно кнопку, а не просто закрыть приложение), то довольно быстро оба игрока станут viewer-ами и, соответственно,
+потеряют контроль на змейками.
+Status: BUG
+
+2. Если в игре участвуют 3 роли - master, deputy и normal, то если выключить deputy из игры, то он у master и у normal
+становится viewer, при этом master не выбирает normal себе в качестве deputy.
+Status: FIXED
+
+3. Если змейка спавнится на правой границе поля, то вылетает исключение у всех участников
+java.lang.IndexOutOfBoundsException: Index: 1, Size: 1
+	at java.base/java.util.LinkedList.checkElementIndex(LinkedList.java:559)
+	at java.base/java.util.LinkedList.get(LinkedList.java:480)
+	at app.model.GameModel.getSnakeWithUpdatedKeyCoordinates(GameModel.java:464)
+	at app.model.GameModel.makeSnakeStep(GameModel.java:299)
+	at app.model.GameModel.makeGameNextStep(GameModel.java:213)
+	at app.networks.NetworkNode.makeNextStepIfTimePassed(NetworkNode.java:265)
+	at app.networks.NetworkNode.processGameStep(NetworkNode.java:138)
+	at app.networks.NetworkNode.communicate(NetworkNode.java:109)
+	at app.networks.NetworkNode.startCommunicating(NetworkNode.java:100)
+	at app.launcher.GameLauncher.main(GameLauncher.java:33)
+Status: ERROR
+
+4. Редко, но бывает, когда змейка проходит через правую границу, то она теряет свою длину до 1 или до 2
+    (при этом игра иногда продолжается, иногда падает у обоих)
+Status: BUG

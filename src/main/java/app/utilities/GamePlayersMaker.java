@@ -4,7 +4,6 @@ import proto.SnakesProto;
 
 public class GamePlayersMaker {
 
-    // TODO: throw instead of return null
     public static SnakesProto.GamePlayer getMasterPlayerFromList(SnakesProto.GamePlayers activePlayers) {
         var masterPlayerIndicator = SnakesProto.NodeRole.MASTER;
         for (var player : activePlayers.getPlayersList()) {
@@ -15,7 +14,6 @@ public class GamePlayersMaker {
         return null;
     }
 
-    // TODO: throw instead of return null
     public static SnakesProto.GamePlayer getDeputyPlayerFromList(SnakesProto.GamePlayers activePlayers) {
         var deputyPlayerIndicator = SnakesProto.NodeRole.DEPUTY;
         for (var player : activePlayers.getPlayersList()) {

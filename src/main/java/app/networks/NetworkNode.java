@@ -108,13 +108,17 @@ public class NetworkNode extends Subscriber {
     private void communicate() {
         processGameStep();
         sendAllRemainingMessages();
+        sendAnnouncementIfNecessary();
+        updateAnnouncementsTimestampsByCurrentTime();
+    }
+
+    private void sendAnnouncementIfNecessary() {
         if (moreTimeHasPassedThanPeriod(lastAnnouncementTimestamp, ANNOUNCEMENT_MESSAGE_PERIOD_IN_MILLIS)) {
             if (nodeRole.equals(MASTER_ROLE)) {
                 sendAnnouncementsToMulticastGroup();
-                lastAnnouncementTimestamp = Instant.now().toEpochMilli();
+                lastAnnouncementTimestamp = getEpochMillisBySystemClockInstant();
             }
         }
-        updateAnnouncementsTimestampsByCurrentTime();
     }
 
     private void updateAnnouncementsTimestampsByCurrentTime() {
@@ -151,19 +155,7 @@ public class NetworkNode extends Subscriber {
                                     .setState(gameModel.getGameState()).build())
                             .build());
                 }
-                var messageBytes = correspondingMessage.getMessage().toByteArray();
-                sendingDatagramPacket = new DatagramPacket(
-                        messageBytes,
-                        messageBytes.length,
-                        InetAddress.getByName(correspondingMessage.getReceiverPlayer().getIpAddress()),
-                        correspondingMessage.getReceiverPlayer().getPort());
-                DebugPrinter.printWithSpecifiedDateAndName(this.getClass().getSimpleName(),
-                        "Send message in process | " +
-                                correspondingMessage.getMessage().getTypeCase() +
-                                " (has ping " + correspondingMessage.getMessage().hasPing() + ") " +
-                                " to " + correspondingMessage.getMessage().getReceiverId() +
-                                " from " + correspondingMessage.getMessage().getSenderId());
-                datagramSocket.send(sendingDatagramPacket);
+                this.sendMessageToAnotherPlayer(correspondingMessage);
                 requiredSendingMessages.remove(correspondingMessage);
                 if (!correspondingMessage.getMessage().getTypeCase().equals(SnakesProto.GameMessage.TypeCase.ACK)) {
                     requiredConfirmationMessages.put(correspondingMessage, Instant.now());
@@ -199,24 +191,25 @@ public class NetworkNode extends Subscriber {
                 var updatedByCurrentStateMessage = correspondingMessage.getMessage().toBuilder()
                         .setState(currentStateMessage).build();
                 correspondingMessage.setMessage(updatedByCurrentStateMessage);
-
-                var messageBytes = correspondingMessage.getMessage().toByteArray();
-                sendingDatagramPacket = new DatagramPacket(
-                        messageBytes,
-                        messageBytes.length,
-                        InetAddress.getByName(correspondingMessage.getReceiverPlayer().getIpAddress()),
-                        correspondingMessage.getReceiverPlayer().getPort());
-                DebugPrinter.printWithSpecifiedDateAndName(this.getClass().getSimpleName(),
-                        "Send message in sending all | " +
-                                correspondingMessage.getMessage().getTypeCase() +
-                                " (has ping " + correspondingMessage.getMessage().hasPing() + ") " +
-                                " to " + correspondingMessage.getMessage().getReceiverId() +
-                                " from " + correspondingMessage.getMessage().getSenderId());
-                datagramSocket.send(sendingDatagramPacket);
+                this.sendMessageToAnotherPlayer(correspondingMessage);
             } catch (Exception exception) {
                 exception.printStackTrace();
             }
         }
+    }
+
+    private void sendMessageToAnotherPlayer(CommunicationMessage sendingMessage) throws IOException {
+        var messageBytes = sendingMessage.getMessage().toByteArray();
+        sendingDatagramPacket = new DatagramPacket(
+                messageBytes,
+                messageBytes.length,
+                InetAddress.getByName(sendingMessage.getReceiverPlayer().getIpAddress()),
+                sendingMessage.getReceiverPlayer().getPort());
+        DebugPrinter.printWithSpecifiedDateAndName(this.getClass().getSimpleName(),
+                "Send message " + sendingMessage.getMessage().getTypeCase() +
+                        " to " + sendingMessage.getMessage().getReceiverId() +
+                        " from " + sendingMessage.getMessage().getSenderId());
+        datagramSocket.send(sendingDatagramPacket);
     }
 
     private void processPlayersActivitiesByPings() {
@@ -235,6 +228,7 @@ public class NetworkNode extends Subscriber {
                                     if (deputyPlayer == null) {
                                         this.sendRoleChangeMessage(player, MASTER_ROLE, DEPUTY_ROLE);
                                         gameModel.changePlayerGameStatus(player.getId(), DEPUTY_ROLE, SnakesProto.GameState.Snake.SnakeState.ALIVE);
+                                        deputyPlayer = player;
                                     } else {
                                         this.sendRoleChangeMessage(player, MASTER_ROLE, NORMAL_ROLE);
                                     }
@@ -252,8 +246,21 @@ public class NetworkNode extends Subscriber {
                                     gameModel.getGameState().getConfig().getNodeTimeoutMs()) {
                                 gameModel.changePlayerGameStatus(activityTimestamp.getKey(), VIEWER_ROLE, SnakesProto.GameState.Snake.SnakeState.ZOMBIE);
                                 if (deputyPlayer != null && deputyPlayer.getId() == activityTimestamp.getKey()) {
+                                    System.out.println("I am here!");
                                     deputyPlayer = null;
                                 }
+                            }
+                        }
+                    }
+                    if (deputyPlayer == null) {
+                        for (var player : gameModel.getGameState().getPlayers().getPlayersList()) {
+                            if (player.getId() != nodeId.hashCode() &&
+                                    !VIEWER_ROLE.equals(player.getRole()) &&
+                                    player.getId() != activityTimestamp.getKey() && MASTER_ROLE.equals(nodeRole)) {
+                                this.sendRoleChangeMessage(player, MASTER_ROLE, DEPUTY_ROLE);
+                                gameModel.changePlayerGameStatus(player.getId(), DEPUTY_ROLE, SnakesProto.GameState.Snake.SnakeState.ALIVE);
+                                deputyPlayer = player;
+                                break;
                             }
                         }
                     }
@@ -289,7 +296,7 @@ public class NetworkNode extends Subscriber {
     }
 
     private boolean moreTimeHasPassedThanPeriod(long timeLabel, long period) {
-        return Instant.now().toEpochMilli() - timeLabel > period;
+        return getEpochMillisBySystemClockInstant() - timeLabel > period;
     }
 
     private void sendAnnouncementsToMulticastGroup() {
@@ -381,7 +388,6 @@ public class NetworkNode extends Subscriber {
             }
             announcementsTimestamps.put(communicationMessage, Instant.now());
         }
-        System.err.println(announcementsTimestamps);
     }
 
     private void handleStateMessage(SnakesProto.GameMessage stateMessage) {
@@ -425,9 +431,6 @@ public class NetworkNode extends Subscriber {
             CommunicationMessage messageByTimestamp = timestamp.getKey();
             if (messageByTimestamp.getMessage().getMsgSeq() == message.getMsgSeq() &&
                     message.getSenderId() == messageByTimestamp.getReceiverPlayer().getId()) {
-                DebugPrinter.printWithSpecifiedDateAndName(this.getClass().getSimpleName(),
-                        "got ack [" + message.getMsgSeq() + "] " +
-                                "from [" + message.getSenderId() + "]");
                 requiredSendingMessages.remove(messageByTimestamp);
             }
         }
@@ -437,7 +440,8 @@ public class NetworkNode extends Subscriber {
             if (correspondingMessage.getMessage().getMsgSeq() == message.getMsgSeq() &&
                     message.getSenderId() == correspondingMessage.getReceiverPlayer().getId()) {
                 DebugPrinter.printWithSpecifiedDateAndName(this.getClass().getSimpleName(),
-                        "got ack for message\n{\n" + correspondingMessage.getMessage() + "}\n");
+                        "Got ack for [" + message.getMsgSeq() + "] " +
+                                "from [" + message.getSenderId() + "]");
                 requiredConfirmationMessages.remove(correspondingMessage);
             }
         }
@@ -468,7 +472,7 @@ public class NetworkNode extends Subscriber {
                 .build();
         requiredSendingMessages.put(communicationMessage, Instant.now());
         DebugPrinter.printWithSpecifiedDateAndName(this.getClass().getSimpleName(),
-                "Required Sending Messages has amount [" + requiredSendingMessages.size() + "]");
+                "Amount of required sending messages is [" + requiredSendingMessages.size() + "]");
     }
 
     private SnakesProto.GamePlayer getPlayerImageByMessage(SnakesProto.GameMessage message) {
@@ -568,7 +572,7 @@ public class NetworkNode extends Subscriber {
 
     public static int incrementStateNumber() {
         DebugPrinter.printWithSpecifiedDateAndName(NetworkNode.class.getSimpleName(),
-                "State number [" + gameStateNumber + "]");
+                "Current state number is [" + gameStateNumber + "]");
         return gameStateNumber++;
     }
 
