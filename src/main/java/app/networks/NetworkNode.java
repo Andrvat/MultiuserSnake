@@ -246,7 +246,6 @@ public class NetworkNode extends Subscriber {
                                     gameModel.getGameState().getConfig().getNodeTimeoutMs()) {
                                 gameModel.changePlayerGameStatus(activityTimestamp.getKey(), VIEWER_ROLE, SnakesProto.GameState.Snake.SnakeState.ZOMBIE);
                                 if (deputyPlayer != null && deputyPlayer.getId() == activityTimestamp.getKey()) {
-                                    System.out.println("I am here!");
                                     deputyPlayer = null;
                                 }
                             }
@@ -458,6 +457,14 @@ public class NetworkNode extends Subscriber {
         gameModel.addNewPlayerToModel(newPlayer);
     }
 
+    public void handleLogoutAction() {
+        var zombieSnakeIndicator = SnakesProto.GameState.Snake.SnakeState.ZOMBIE;
+        this.sendRoleChangeMessage(null, SnakesProto.NodeRole.VIEWER, null);
+        gameModel.changePlayerGameStatus(nodeId.hashCode(), VIEWER_ROLE, zombieSnakeIndicator);
+        nodeRole = VIEWER_ROLE;
+        gameModel.informAllSubscribers();
+    }
+
     public void sendAckMessageTo(SnakesProto.GameMessage message) {
         var ackMessageImage = SnakesProto.GameMessage.AckMsg.newBuilder().build();
         var gameMessage = SnakesProto.GameMessage.newBuilder()
@@ -505,7 +512,7 @@ public class NetworkNode extends Subscriber {
         requiredSendingMessages.put(communicationMessage, Instant.now());
     }
 
-    public void sendRoleChangeMessage(SnakesProto.GamePlayer receiverPlayer,
+    private void sendRoleChangeMessage(SnakesProto.GamePlayer receiverPlayer,
                                       SnakesProto.NodeRole senderPlayerRole,
                                       SnakesProto.NodeRole receiverPlayerRole) {
         if (receiverPlayer == null) {

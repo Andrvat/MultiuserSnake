@@ -44,7 +44,7 @@ public class GameController {
     }
 
     public void exitFromGame() {
-        networkNode.sendRoleChangeMessage(null, SnakesProto.NodeRole.VIEWER, null);
+        networkNode.handleLogoutAction();
     }
 
     public boolean isMySnakeAlive() {
