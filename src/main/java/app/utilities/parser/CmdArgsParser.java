@@ -1,7 +1,7 @@
 package app.utilities.parser;
 
+import app.utilities.FreePortSearcher;
 import com.github.javafaker.Faker;
-import me.alexpanov.net.FreePortFinder;
 import org.apache.commons.cli.*;
 
 import java.util.*;
@@ -65,7 +65,7 @@ public class CmdArgsParser {
         try {
             hostPort = Integer.parseInt(commandLine.getOptionValue("p"));
         } catch (Exception e) {
-            hostPort = FreePortFinder.findFreeLocalPort();
+            hostPort = FreePortSearcher.getRandomFreePort();
         }
     }
 

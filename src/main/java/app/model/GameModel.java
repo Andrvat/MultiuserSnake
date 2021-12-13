@@ -451,7 +451,6 @@ public class GameModel extends Publisher {
         return false;
     }
 
-    // TODO: баг с проходом через правую сторону на левую (обрезается змейка или падает программа)
     private SnakesProto.GameState.Snake getSnakeWithUpdatedKeyCoordinates(
             SnakesProto.GameState.Snake snake, LinkedList<SnakesProto.GameState.Coord> snakeCoordinatesAfterStep) {
         var snakeBuilder = snake.toBuilder();
