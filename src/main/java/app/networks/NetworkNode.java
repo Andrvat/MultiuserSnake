@@ -110,6 +110,7 @@ public class NetworkNode extends Subscriber {
         sendAllRemainingMessages();
         sendAnnouncementIfNecessary();
         updateAnnouncementsTimestampsByCurrentTime();
+        updateMyRoleFromPlayersList();
     }
 
     private void sendAnnouncementIfNecessary() {
@@ -131,6 +132,18 @@ public class NetworkNode extends Subscriber {
         }
         if (announcementsTimestamps.size() != lastAnnouncementsSize) {
             this.updateState();
+        }
+    }
+
+    private void updateMyRoleFromPlayersList() {
+        for (var player : gameModel.getGameState().getPlayers().getPlayersList()) {
+            if (null != player) {
+                if (player.getId() == this.nodeId.hashCode()) {
+                    if (!player.getRole().equals(this.nodeRole)) {
+                        this.nodeRole = player.getRole();
+                    }
+                }
+            }
         }
     }
 
@@ -362,7 +375,6 @@ public class NetworkNode extends Subscriber {
             if (message.getTypeCase().equals(announcementMessageIndicator)) {
                 handleAnnouncementMessage(message);
             }
-//            gameModel.makePlayerTimestamp(message.getSenderId());
         }
     }
 
